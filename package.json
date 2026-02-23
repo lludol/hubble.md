@@ -3,7 +3,12 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
+    "check": "biome check .",
+    "check:fix": "biome check . --write",
     "typecheck": "pnpm -r --if-present typecheck",
     "build": "pnpm -r --if-present build"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.4"
   }
 }
