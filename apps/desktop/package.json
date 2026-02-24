@@ -23,6 +23,7 @@
 		"react-dom": "^19.1.0"
 	},
 	"devDependencies": {
+		"@iconify-json/mingcute": "^1.2.7",
 		"@tailwindcss/vite": "^4.1.18",
 		"@tauri-apps/cli": "^2",
 		"@types/react": "^19.1.8",
@@ -30,6 +31,7 @@
 		"@vitejs/plugin-react": "^4.6.0",
 		"tailwindcss": "^4.1.18",
 		"typescript": "~5.8.3",
+		"unplugin-icons": "^23.0.1",
 		"vite": "^7.0.4"
 	}
 }
