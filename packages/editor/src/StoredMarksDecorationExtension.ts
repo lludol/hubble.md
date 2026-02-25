@@ -6,6 +6,17 @@ const StoredMarksDecorationKey = new PluginKey("storedMarksDecoration");
 
 /** Mark types that get a cursor decoration when stored on an empty selection. */
 const DECORATED_MARKS = ["bold", "italic", "strike"] as const;
+const MARK_PRIORITY = ["code", "bold", "italic", "strike", "link"] as const;
+const DELIMITER_BY_MARK: Record<
+	string,
+	{ start: string; end: string } | undefined
+> = {
+	code: { start: "`", end: "`" },
+	bold: { start: "**", end: "**" },
+	italic: { start: "*", end: "*" },
+	strike: { start: "~~", end: "~~" },
+	link: { start: "[", end: "]" },
+};
 
 /**
  * Shows a zero-width widget decoration at the cursor when inline marks
@@ -35,22 +46,39 @@ export const StoredMarksDecorationExtension = Extension.create({
 							);
 
 						if (activeNames.length === 0) return null;
+						const activeSet = new Set(activeNames);
+						const ordered = MARK_PRIORITY.filter((mark) => activeSet.has(mark));
+						const leftDelimiter = ordered
+							.map((mark) => DELIMITER_BY_MARK[mark]?.start ?? "")
+							.join("");
+						const rightDelimiter = [...ordered]
+							.reverse()
+							.map((mark) => DELIMITER_BY_MARK[mark]?.end ?? "")
+							.join("");
 
-						const widget = document.createElement("span");
-						widget.className = activeNames
-							.map((n) => `pm-stored-mark-${n}`)
-							.join(" ");
-						widget.textContent = "\u200B"; // zero-width space
+						const leftWidget = Decoration.widget(
+							selection.head,
+							() => createDelimiterWidget(leftDelimiter, "start"),
+							{ side: -1 },
+						);
+						const rightWidget = Decoration.widget(
+							selection.head,
+							() => createDelimiterWidget(rightDelimiter, "end"),
+							{ side: 1 },
+						);
 
-						const deco = Decoration.widget(selection.head, widget, {
-							side: 0,
-							// Marks typed after this widget should appear after it
-							key: "storedMarksDecoration",
-						});
-						return DecorationSet.create(state.doc, [deco]);
+						return DecorationSet.create(state.doc, [leftWidget, rightWidget]);
 					},
 				},
 			}),
 		];
 	},
 });
+
+function createDelimiterWidget(delimiter: string, boundary: "start" | "end") {
+	const span = document.createElement("span");
+	span.className = `pm-md-delimiter pm-md-delimiter-${boundary}`;
+	span.contentEditable = "false";
+	span.textContent = delimiter;
+	return span;
+}
