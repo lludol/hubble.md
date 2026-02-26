@@ -275,10 +275,13 @@ export function LinkPopover({
 					className="flex h-7 w-[165px] cursor-pointer overflow-hidden rounded-[2px] border border-zinc-300 bg-gradient-to-b from-white to-zinc-50 text-left shadow-[0_1px_3px_rgba(0,0,0,0.1)]"
 					onClick={() => dispatch({ type: "EXPAND_REQUESTED" })}
 				>
-					<span className="min-w-0 flex-1 overflow-hidden px-2 py-[5px] text-[11px] leading-[16px] text-zinc-700 text-clip whitespace-nowrap">
+					<span
+						title={activeLink.href}
+						className="min-w-0 flex-1 overflow-hidden px-2 py-[5px] pr-3 text-[11px] leading-[16px] text-zinc-700 whitespace-nowrap [mask-image:linear-gradient(to_right,black_84%,transparent)] [-webkit-mask-image:linear-gradient(to_right,black_84%,transparent)]"
+					>
 						{activeLink.href}
 					</span>
-					<span className="flex h-full items-center bg-accent px-[10px] text-[11px] font-semibold leading-[16px] tracking-[0.12em] text-white">
+					<span className="flex h-full items-center rounded-ee-[2px] rounded-se-[2px] bg-accent px-[10px] text-[11px] font-semibold leading-[16px] tracking-[0.12em] text-white">
 						⌘K
 					</span>
 				</button>
@@ -319,7 +322,7 @@ export function LinkPopover({
 							</button>
 							<button
 								type="button"
-								className="flex items-center justify-center gap-1 bg-accent font-semibold text-white"
+								className="flex items-center justify-center gap-1 rounded-ee-[2px] rounded-se-[2px] bg-accent font-semibold text-white"
 								onClick={() => {
 									void visitLink(activeLink.href);
 								}}
