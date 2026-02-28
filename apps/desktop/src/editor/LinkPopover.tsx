@@ -9,9 +9,11 @@ import { getActiveLinkRange } from "@hubble.md/editor";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { Editor } from "@tiptap/core";
 import { keymatch } from "keymatch";
+import MingcutePencilFill from "~icons/mingcute/pencil-fill";
 import { type RefObject, useEffect, useReducer, useRef, useState } from "react";
 import { toast } from "sonner";
 import { FOCUS_LINK_POPOVER_EVENT } from "./SmartLinkExtension";
+import { useEditorInputMode } from "./useEditorInputMode";
 
 type PopoverMode = "hidden" | "preview" | "actions";
 type MachineState = {
@@ -103,6 +105,7 @@ export function LinkPopover({
 		machineReducer,
 		INITIAL_MACHINE_STATE,
 	);
+	const { inputMode } = useEditorInputMode({ editor, containerRef });
 	const inputRef = useRef<HTMLInputElement | null>(null);
 	const popoverRef = useRef<HTMLDivElement | null>(null);
 	const positionUpdateRef = useRef<(() => void) | null>(null);
@@ -293,8 +296,17 @@ export function LinkPopover({
 					>
 						{activeLink.href}
 					</span>
-					<span className="flex h-full items-center rounded-ee-[2px] rounded-se-[2px] bg-accent px-[10px] text-[11px] font-semibold leading-[16px] tracking-[0.12em] text-white">
-						⌘K
+					<span className="relative flex h-full w-[42px] items-center justify-center overflow-hidden rounded-ee-[2px] rounded-se-[2px] bg-accent text-white">
+						<span
+							className={`absolute inset-0 flex items-center justify-center text-[11px] font-semibold leading-[16px] tracking-[0.12em] transition-transform duration-200 ${inputMode === "keyboard" ? "translate-y-0" : "-translate-y-[120%]"}`}
+						>
+							⌘K
+						</span>
+						<span
+							className={`absolute inset-0 flex items-center justify-center transition-transform duration-200 ${inputMode === "keyboard" ? "translate-y-[120%]" : "translate-y-0"}`}
+						>
+							<MingcutePencilFill aria-label="Edit link" className="h-3 w-3" />
+						</span>
 					</span>
 				</button>
 			) : (
