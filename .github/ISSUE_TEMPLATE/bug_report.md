@@ -27,7 +27,7 @@ assignees: ''
 <!-- What actually happened -->
 
 ## Environment
-- **Browser:** 
+
 - **OS:** 
 
 ## Additional Context
