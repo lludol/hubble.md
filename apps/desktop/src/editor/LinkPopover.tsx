@@ -8,6 +8,7 @@ import {
 import { getActiveLinkRange } from "@hubble.md/editor";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import type { Editor } from "@tiptap/core";
+import { TextSelection } from "@tiptap/pm/state";
 import { keymatch } from "keymatch";
 import {
 	type RefObject,
@@ -23,26 +24,35 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import MingcutePencilFill from "~icons/mingcute/pencil-fill";
 import { cn } from "../lib/utils";
+import { linkCreationGhostKey } from "./LinkCreationGhostExtension";
 import styles from "./LinkPopover.module.css";
-import { FOCUS_LINK_POPOVER_EVENT } from "./SmartLinkExtension";
+import {
+	FOCUS_LINK_POPOVER_EVENT,
+	LINK_CREATION_REQUESTED_EVENT,
+} from "./SmartLinkExtension";
 import { useEditorInputMode } from "./useEditorInputMode";
 
-type PopoverMode = "hidden" | "preview" | "actions";
+// ── State machine ───────────────────────────────────────────────────
+
+type PopoverMode = "hidden" | "preview" | "actions" | "creating";
 type MachineState = {
 	mode: PopoverMode;
 	activeKey: string | null;
+	pendingCreation: boolean;
 };
 type MachineEvent =
 	| { type: "LINK_SESSION_CHANGED"; activeKey: string | null }
 	| { type: "EXPAND_REQUESTED" }
 	| { type: "TOGGLE_ACTIONS_REQUESTED" }
-	| { type: "ESCAPE_REQUESTED" };
-// Modes: hidden=dismissed for current link session, preview=compact chip,
-// actions=expanded menu (input focus is managed by effect, not machine state).
+	| { type: "ESCAPE_REQUESTED" }
+	| { type: "CREATION_REQUESTED" }
+	| { type: "CREATION_CONFIRMED" }
+	| { type: "TITLE_INPUT_REQUESTED" };
 
 const INITIAL_MACHINE_STATE: MachineState = {
 	mode: "hidden",
 	activeKey: null,
+	pendingCreation: false,
 };
 
 function machineReducer(
@@ -52,41 +62,70 @@ function machineReducer(
 	switch (event.type) {
 		case "LINK_SESSION_CHANGED": {
 			const { activeKey } = event;
-			if (!activeKey) return INITIAL_MACHINE_STATE;
+			if (state.mode === "creating") return state;
+			if (!activeKey) {
+				if (state.pendingCreation && state.activeKey === null) {
+					// No text typed yet — keep waiting for first character
+					return state;
+				}
+				return INITIAL_MACHINE_STATE;
+			}
 			if (state.activeKey !== activeKey) {
-				return { mode: "preview", activeKey };
+				return {
+					mode: "preview",
+					activeKey,
+					pendingCreation: state.pendingCreation,
+				};
 			}
 			return { ...state, activeKey };
 		}
 		case "EXPAND_REQUESTED": {
+			if (state.mode === "creating") return state;
 			if (!state.activeKey) return state;
 			return { ...state, mode: "actions" };
 		}
 		case "TOGGLE_ACTIONS_REQUESTED": {
 			if (!state.activeKey) return state;
-			if (state.mode === "preview") {
-				return { ...state, mode: "actions" };
-			}
-			if (state.mode === "actions") {
-				return { ...state, mode: "preview" };
-			}
+			if (state.mode === "preview") return { ...state, mode: "actions" };
+			if (state.mode === "actions") return { ...state, mode: "preview" };
 			return state;
 		}
 		case "ESCAPE_REQUESTED": {
-			if (state.mode === "actions") {
-				return { ...state, mode: "preview" };
-			}
-			if (state.mode === "preview" && state.activeKey) {
-				return {
-					...state,
-					mode: "hidden",
-				};
+			if (state.mode === "creating") return INITIAL_MACHINE_STATE;
+			if (state.mode === "actions") return { ...state, mode: "preview" };
+			if (state.mode === "preview") {
+				if (state.pendingCreation) {
+					return { ...INITIAL_MACHINE_STATE };
+				}
+				return { ...state, mode: "hidden" };
 			}
 			return state;
+		}
+		case "CREATION_REQUESTED": {
+			return {
+				mode: "creating",
+				activeKey: null,
+				pendingCreation: false,
+			};
+		}
+		case "CREATION_CONFIRMED": {
+			return { ...INITIAL_MACHINE_STATE };
+		}
+		case "TITLE_INPUT_REQUESTED": {
+			return { mode: "preview", activeKey: null, pendingCreation: true };
 		}
 		default:
 			return state;
 	}
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────
+
+const GHOST_TRUNCATE = 60;
+
+function truncateGhost(href: string): string {
+	if (href.length <= GHOST_TRUNCATE) return href;
+	return `${href.slice(0, GHOST_TRUNCATE)}…`;
 }
 
 async function copyLinkToClipboard(href: string) {
@@ -97,6 +136,97 @@ async function copyLinkToClipboard(href: string) {
 		toast.error("Failed to copy link");
 	}
 }
+
+function removeActiveLink(editor: Editor, from: number, to: number) {
+	const linkType = editor.state.schema.marks.link;
+	if (!linkType) return;
+	const tr = editor.state.tr.removeMark(from, to, linkType);
+	editor.view.dispatch(tr);
+	editor.commands.focus(undefined, { scrollIntoView: false });
+}
+
+function insertLinkedText(editor: Editor, pos: number, href: string) {
+	const linkType = editor.state.schema.marks.link;
+	if (!linkType) return;
+	const textNode = editor.state.schema.text(href, [linkType.create({ href })]);
+	const tr = editor.state.tr.insert(pos, textNode);
+	editor.view.dispatch(tr);
+}
+
+function applyLinkMarkAtPos(editor: Editor, pos: number, href: string) {
+	const linkType = editor.state.schema.marks.link;
+	if (!linkType) return;
+	const tr = editor.state.tr;
+	tr.setSelection(TextSelection.create(tr.doc, pos));
+	tr.setStoredMarks([linkType.create({ href })]);
+	editor.view.dispatch(tr);
+}
+
+function clearGhostText(editor: Editor) {
+	const current = linkCreationGhostKey.getState(editor.state);
+	if (current) {
+		editor.view.dispatch(editor.state.tr.setMeta(linkCreationGhostKey, null));
+	}
+}
+
+async function visitLink(href: string) {
+	try {
+		const parsed = new URL(href);
+		const protocol = parsed.protocol.toLowerCase();
+		if (protocol !== "http:" && protocol !== "https:") {
+			toast.error("Only http(s) links can be opened");
+			return;
+		}
+		await openUrl(href);
+	} catch {
+		toast.error("Invalid link URL");
+	}
+}
+
+// ── Positioning ─────────────────────────────────────────────────────
+
+function updateFloatingPosition(
+	editor: Editor,
+	container: HTMLDivElement,
+	floatingEl: HTMLDivElement,
+	pos: number,
+	setX: (x: number) => void,
+	setY: (y: number) => void,
+) {
+	const reference: VirtualElement = {
+		contextElement: container,
+		getBoundingClientRect() {
+			const coords = editor.view.coordsAtPos(pos);
+			return {
+				x: coords.left,
+				y: coords.top,
+				left: coords.left,
+				top: coords.top,
+				right: coords.right,
+				bottom: coords.bottom,
+				width: coords.right - coords.left,
+				height: coords.bottom - coords.top,
+				toJSON() {
+					return this;
+				},
+			};
+		},
+	};
+	void computePosition(reference, floatingEl, {
+		strategy: "fixed",
+		placement: "top",
+		middleware: [
+			offset(4),
+			flip({ fallbackPlacements: ["bottom"] }),
+			shift({ padding: 8 }),
+		],
+	}).then(({ x, y }) => {
+		setX(x);
+		setY(y);
+	});
+}
+
+// ── Component ───────────────────────────────────────────────────────
 
 export function LinkPopover({
 	editor,
@@ -123,6 +253,12 @@ export function LinkPopover({
 	const positionUpdateRef = useRef<(() => void) | null>(null);
 	const machineStateRef = useRef(machineState);
 	const [isPreviewEntering, setIsPreviewEntering] = useState(false);
+
+	// Creation-mode state
+	const [creationCursorPos, setCreationCursorPos] = useState<number | null>(
+		null,
+	);
+	const [creationHref, setCreationHref] = useState("");
 
 	useEffect(() => {
 		machineStateRef.current = machineState;
@@ -157,6 +293,7 @@ export function LinkPopover({
 		dispatch(event);
 	}, []);
 
+	// ── Link detection + positioning for existing links ─────────────
 	useEffect(() => {
 		if (!editor) return;
 		const update = () => {
@@ -168,43 +305,20 @@ export function LinkPopover({
 				type: "LINK_SESSION_CHANGED",
 				activeKey: nextActiveKey,
 			});
-			const container = containerRef.current;
-			if (!container || !link) return;
-			const floatingEl = popoverRef.current;
-			if (!floatingEl) return;
-			const selectionPos = editor.state.selection.from;
-			const reference: VirtualElement = {
-				contextElement: container,
-				getBoundingClientRect() {
-					const coords = editor.view.coordsAtPos(selectionPos);
-					return {
-						x: coords.left,
-						y: coords.top,
-						left: coords.left,
-						top: coords.top,
-						right: coords.right,
-						bottom: coords.bottom,
-						width: coords.right - coords.left,
-						height: coords.bottom - coords.top,
-						toJSON() {
-							return this;
-						},
-					};
-				},
-			};
 
-			void computePosition(reference, floatingEl, {
-				strategy: "fixed",
-				placement: "top",
-				middleware: [
-					offset(4),
-					flip({ fallbackPlacements: ["bottom"] }),
-					shift({ padding: 8 }),
-				],
-			}).then(({ x, y }) => {
-				setFloatingX(x);
-				setFloatingY(y);
-			});
+			const container = containerRef.current;
+			const floatingEl = popoverRef.current;
+			const shouldPosition =
+				link || machineStateRef.current.pendingCreation;
+			if (!container || !floatingEl || !shouldPosition) return;
+			updateFloatingPosition(
+				editor,
+				container,
+				floatingEl,
+				editor.state.selection.from,
+				setFloatingX,
+				setFloatingY,
+			);
 		};
 		positionUpdateRef.current = update;
 
@@ -227,6 +341,7 @@ export function LinkPopover({
 		};
 	}, [editor, containerRef, dispatchMachineEvent]);
 
+	// ── Listen for FOCUS_LINK_POPOVER_EVENT (selection-based flow) ──
 	useEffect(() => {
 		const onFocusRequest = () => {
 			dispatchMachineEvent({ type: "EXPAND_REQUESTED" });
@@ -243,20 +358,136 @@ export function LinkPopover({
 		};
 	}, [dispatchMachineEvent]);
 
+	// ── Listen for LINK_CREATION_REQUESTED_EVENT (empty-selection Cmd+K) ──
+	useEffect(() => {
+		const onCreationRequested = (event: Event) => {
+			const pos = (event as CustomEvent<{ pos: number }>).detail.pos;
+			setCreationCursorPos(pos);
+			setCreationHref("");
+			dispatchMachineEvent({ type: "CREATION_REQUESTED" });
+		};
+		window.addEventListener(LINK_CREATION_REQUESTED_EVENT, onCreationRequested);
+		return () => {
+			window.removeEventListener(
+				LINK_CREATION_REQUESTED_EVENT,
+				onCreationRequested,
+			);
+		};
+	}, [dispatchMachineEvent]);
+
+	// ── Focus input when entering creating or actions mode ──────────
 	useEffect(() => {
 		positionUpdateRef.current?.();
-		if (machineState.mode !== "actions") return;
+		if (machineState.mode !== "actions" && machineState.mode !== "creating")
+			return;
 		queueMicrotask(() => {
 			inputRef.current?.focus();
 			inputRef.current?.select();
 		});
 	}, [machineState.mode]);
 
+	// ── Position popover during creation mode ───────────────────────
 	useEffect(() => {
-		if (!editor || !activeLink) return;
+		if (
+			!editor ||
+			machineState.mode !== "creating" ||
+			creationCursorPos === null
+		)
+			return;
+		const container = containerRef.current;
+		const floatingEl = popoverRef.current;
+		if (!container || !floatingEl) return;
+		updateFloatingPosition(
+			editor,
+			container,
+			floatingEl,
+			creationCursorPos,
+			setFloatingX,
+			setFloatingY,
+		);
+	}, [editor, containerRef, machineState.mode, creationCursorPos]);
+
+	// ── Ghost text decoration management ────────────────────────────
+	useEffect(() => {
+		if (!editor) return;
+		if (
+			machineState.mode === "creating" &&
+			creationCursorPos !== null &&
+			creationHref
+		) {
+			editor.view.dispatch(
+				editor.state.tr.setMeta(linkCreationGhostKey, {
+					pos: creationCursorPos,
+					text: truncateGhost(creationHref),
+				}),
+			);
+		} else if (machineState.mode !== "creating") {
+			clearGhostText(editor);
+		}
+	}, [editor, machineState.mode, creationCursorPos, creationHref]);
+
+	// ── Keyboard: creating mode ─────────────────────────────────────
+	useEffect(() => {
+		if (!editor || machineState.mode !== "creating") return;
 		const onKeyDown = (event: KeyboardEvent) => {
 			const isInputFocused = document.activeElement === inputRef.current;
-			const isVisible = machineState.mode !== "hidden";
+
+			if (isInputFocused && keymatch(event, "Enter")) {
+				event.preventDefault();
+				event.stopPropagation();
+				if (creationHref && creationCursorPos !== null) {
+					clearGhostText(editor);
+					insertLinkedText(editor, creationCursorPos, creationHref);
+				}
+				dispatchMachineEvent({ type: "CREATION_CONFIRMED" });
+				editor.commands.focus(undefined, { scrollIntoView: false });
+				return;
+			}
+
+			if (isInputFocused && event.key === "Tab") {
+				event.preventDefault();
+				event.stopPropagation();
+				if (creationHref && creationCursorPos !== null) {
+					clearGhostText(editor);
+					applyLinkMarkAtPos(editor, creationCursorPos, creationHref);
+				}
+				dispatchMachineEvent({ type: "TITLE_INPUT_REQUESTED" });
+				editor.commands.focus(undefined, { scrollIntoView: false });
+				return;
+			}
+
+			if (keymatch(event, "Escape")) {
+				event.preventDefault();
+				event.stopPropagation();
+				clearGhostText(editor);
+				dispatchMachineEvent({ type: "ESCAPE_REQUESTED" });
+				editor.commands.focus(undefined, { scrollIntoView: false });
+				return;
+			}
+
+			if (keymatch(event, "CmdOrCtrl+K")) {
+				event.preventDefault();
+				event.stopPropagation();
+			}
+		};
+		window.addEventListener("keydown", onKeyDown, true);
+		return () => window.removeEventListener("keydown", onKeyDown, true);
+	}, [
+		editor,
+		machineState.mode,
+		creationHref,
+		creationCursorPos,
+		dispatchMachineEvent,
+	]);
+
+	// ── Keyboard: existing link (preview / actions) ─────────────────
+	useEffect(() => {
+		if (!editor || !activeLink) return;
+		if (machineState.mode === "creating") return;
+		const onKeyDown = (event: KeyboardEvent) => {
+			const isInputFocused = document.activeElement === inputRef.current;
+			const isVisible =
+				machineState.mode !== "hidden" || machineState.pendingCreation;
 
 			if (
 				isInputFocused &&
@@ -277,12 +508,15 @@ export function LinkPopover({
 			}
 
 			if ((isVisible || editor.isFocused) && keymatch(event, "Escape")) {
+				event.preventDefault();
 				const shouldReturnFocusToEditor =
 					machineState.mode === "preview" || machineState.mode === "actions";
 				queueMicrotask(() => {
 					dispatchMachineEvent({ type: "ESCAPE_REQUESTED" });
 					if (shouldReturnFocusToEditor) {
-						editor.commands.focus(undefined, { scrollIntoView: false });
+						editor.commands.focus(undefined, {
+							scrollIntoView: false,
+						});
 					}
 				});
 				return;
@@ -290,7 +524,6 @@ export function LinkPopover({
 
 			if (keymatch(event, "CmdOrCtrl+K")) {
 				if (!isVisible) return;
-				// Popover owns Cmd+K while visible to avoid editor shortcut races.
 				event.preventDefault();
 				event.stopPropagation();
 				dispatchMachineEvent({ type: "TOGGLE_ACTIONS_REQUESTED" });
@@ -312,11 +545,28 @@ export function LinkPopover({
 
 		window.addEventListener("keydown", onKeyDown, true);
 		return () => window.removeEventListener("keydown", onKeyDown, true);
-	}, [editor, activeLink, machineState.mode, dispatchMachineEvent, hrefValue]);
+	}, [
+		editor,
+		activeLink,
+		machineState.mode,
+		machineState.pendingCreation,
+		dispatchMachineEvent,
+		hrefValue,
+	]);
 
-	if (!editor || !activeLink || machineState.mode === "hidden") return null;
+	// ── Early return: nothing visible ───────────────────────────────
+	if (!editor) return null;
+	if (machineState.mode === "creating") {
+		// Render creating UI below (no activeLink needed)
+	} else if (machineState.mode === "hidden") {
+		return null;
+	} else if (!activeLink && !machineState.pendingCreation) {
+		return null;
+	}
 
-	const handleInput = (href: string) => {
+	// ── Handlers ────────────────────────────────────────────────────
+	const handleExistingLinkInput = (href: string) => {
+		if (!activeLink) return;
 		setHrefValue(href);
 		const linkType = editor.state.schema.marks.link;
 		if (!linkType) return;
@@ -329,16 +579,18 @@ export function LinkPopover({
 		editor.view.dispatch(tr);
 	};
 
+	// ── Render ──────────────────────────────────────────────────────
 	const actionHintClass =
 		"text-[9px] leading-[14px] tracking-[0.12em] text-muted-foreground/85";
 	const actionButtonClass =
 		"h-auto flex-1 rounded-none border-0 px-2 text-foreground shadow-none inset-shadow-none hover:bg-muted/80";
+
 	return (
 		<div
 			ref={popoverRef}
 			className={cn(
 				"fixed z-[4] w-[250px] transition-position motion-reduce:transition-none",
-				machineState.mode === "actions"
+				machineState.mode === "actions" || machineState.mode === "creating"
 					? "duration-[var(--default-transition-duration)] ease-spring-snappy"
 					: "duration-[var(--cursor-motion-duration)] ease-cursor-motion",
 			)}
@@ -347,7 +599,23 @@ export function LinkPopover({
 				insetBlockStart: `${floatingY}px`,
 			}}
 		>
-			{machineState.mode === "preview" ? (
+			{machineState.mode === "creating" ? (
+				<div className="w-full overflow-hidden rounded-sm border border-border bg-popover shadow-panel">
+					<div className="p-1">
+						<Input
+							ref={inputRef}
+							type="text"
+							value={creationHref}
+							placeholder="Paste or type a link"
+							onChange={(event) => setCreationHref(event.target.value)}
+							className="h-7 rounded-[calc(var(--radius)-1px)] border-border bg-background px-2 py-[5px] text-[11px] leading-[16px]"
+						/>
+					</div>
+					<div className="flex h-6 items-center px-2 text-[9px] leading-[14px] tracking-[0.12em] text-muted-foreground/85">
+						<span>⇥ to set title</span>
+					</div>
+				</div>
+			) : machineState.mode === "preview" ? (
 				<div className="flex justify-center">
 					<Button
 						variant="outline"
@@ -363,10 +631,10 @@ export function LinkPopover({
 						onClick={() => dispatchMachineEvent({ type: "EXPAND_REQUESTED" })}
 					>
 						<span
-							title={activeLink.href}
+							title={activeLink?.href ?? creationHref}
 							className="min-w-0 flex-1 overflow-hidden px-2.5 py-[5px] pr-3 text-[11px] leading-[16px] text-foreground whitespace-nowrap [mask-image:linear-gradient(to_right,black_84%,transparent)] [-webkit-mask-image:linear-gradient(to_right,black_84%,transparent)]"
 						>
-							{activeLink.href}
+							{activeLink?.href ?? creationHref}
 						</span>
 						<span className="relative flex h-full w-[42px] shrink-0 items-center justify-center overflow-hidden border-s border-border bg-primary text-primary-foreground">
 							<span
@@ -403,7 +671,7 @@ export function LinkPopover({
 							type="text"
 							value={hrefValue}
 							placeholder="⌫ to remove link"
-							onChange={(event) => handleInput(event.target.value)}
+							onChange={(event) => handleExistingLinkInput(event.target.value)}
 							className="h-7 rounded-[calc(var(--radius)-1px)] border-border bg-background px-2 py-[5px] text-[11px] leading-[16px]"
 						/>
 					</div>
@@ -414,9 +682,10 @@ export function LinkPopover({
 							variant="ghost"
 							size="xs"
 							className={actionButtonClass}
-							onClick={() =>
-								removeActiveLink(editor, activeLink.from, activeLink.to)
-							}
+							onClick={() => {
+								if (!activeLink) return;
+								removeActiveLink(editor, activeLink.from, activeLink.to);
+							}}
 						>
 							<span>Remove</span>
 						</Button>
@@ -430,6 +699,7 @@ export function LinkPopover({
 							size="xs"
 							className={actionButtonClass}
 							onClick={() => {
+								if (!activeLink) return;
 								void copyLinkToClipboard(activeLink.href);
 							}}
 						>
@@ -446,6 +716,7 @@ export function LinkPopover({
 							size="xs"
 							className="h-auto min-w-[72px] rounded-none border-0 px-2 text-primary-foreground shadow-none inset-shadow-none hover:brightness-105"
 							onClick={() => {
+								if (!activeLink) return;
 								void visitLink(activeLink.href);
 							}}
 						>
@@ -459,26 +730,4 @@ export function LinkPopover({
 			)}
 		</div>
 	);
-}
-
-function removeActiveLink(editor: Editor, from: number, to: number) {
-	const linkType = editor.state.schema.marks.link;
-	if (!linkType) return;
-	const tr = editor.state.tr.removeMark(from, to, linkType);
-	editor.view.dispatch(tr);
-	editor.commands.focus(undefined, { scrollIntoView: false });
-}
-
-async function visitLink(href: string) {
-	try {
-		const parsed = new URL(href);
-		const protocol = parsed.protocol.toLowerCase();
-		if (protocol !== "http:" && protocol !== "https:") {
-			toast.error("Only http(s) links can be opened");
-			return;
-		}
-		await openUrl(href);
-	} catch {
-		toast.error("Invalid link URL");
-	}
 }

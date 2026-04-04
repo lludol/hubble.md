@@ -1,32 +1,7 @@
 import { Extension } from "@tiptap/core";
 import type { EditorState, Transaction } from "@tiptap/pm/state";
 export const FOCUS_LINK_POPOVER_EVENT = "hubble:focus-link-popover";
-
-function findWordRangeAtCursor(
-	state: EditorState,
-): { from: number; to: number } | null {
-	const { selection } = state;
-	if (!selection.empty) return null;
-	const $from = selection.$from;
-	const parent = $from.parent;
-	if (!parent.isTextblock) return null;
-
-	const text = parent.textContent;
-	const offset = $from.parentOffset;
-	let start = offset;
-	let end = offset;
-
-	while (start > 0 && !/\s/.test(text[start - 1] ?? "")) {
-		start -= 1;
-	}
-	while (end < text.length && !/\s/.test(text[end] ?? "")) {
-		end += 1;
-	}
-	if (start === end) return null;
-
-	const base = $from.start();
-	return { from: base + start, to: base + end };
-}
+export const LINK_CREATION_REQUESTED_EVENT = "hubble:link-creation-requested";
 
 function toggleLinkAtSelection() {
 	return () =>
@@ -41,11 +16,19 @@ function toggleLinkAtSelection() {
 			if (!linkType) return false;
 
 			const { selection } = state;
-			const range = selection.empty
-				? findWordRangeAtCursor(state)
-				: { from: selection.from, to: selection.to };
-			if (!range || range.from >= range.to) return false;
 
+			// Empty selection: enter creation flow (no mark inserted yet)
+			if (selection.empty) {
+				window.dispatchEvent(
+					new CustomEvent(LINK_CREATION_REQUESTED_EVENT, {
+						detail: { pos: selection.from },
+					}),
+				);
+				return true;
+			}
+
+			// Non-empty selection: apply link mark to selection
+			const range = { from: selection.from, to: selection.to };
 			const hasLink = state.doc.rangeHasMark(range.from, range.to, linkType);
 			if (!hasLink) {
 				const tr = state.tr.addMark(

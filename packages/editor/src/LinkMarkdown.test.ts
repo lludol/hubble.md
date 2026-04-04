@@ -34,3 +34,25 @@ describe("link markdown conversion", () => {
 		expect(markdown).toBe("[OpenAI](https://openai.com)");
 	});
 });
+
+describe("link where text equals href", () => {
+	it("parses as regular link mark", () => {
+		const doc = markdownToTiptapDoc(
+			"[https://example.com](https://example.com)",
+		);
+		const paragraph = doc.content?.[0];
+		const textNode = paragraph?.content?.[0];
+		expect(textNode?.type).toBe("text");
+		expect(textNode?.text).toBe("https://example.com");
+		expect(textNode?.marks).toEqual([
+			{ type: "link", attrs: { href: "https://example.com" } },
+		]);
+	});
+
+	it("round-trips through markdown", () => {
+		const input = "[https://example.com](https://example.com)";
+		const doc = markdownToTiptapDoc(input);
+		const output = tiptapDocToMarkdown(doc);
+		expect(output).toBe(input);
+	});
+});
