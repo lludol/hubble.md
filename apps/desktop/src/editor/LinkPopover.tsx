@@ -141,6 +141,18 @@ async function copyLinkToClipboard(href: string) {
 function removeActiveLink(editor: Editor, from: number, to: number) {
 	const linkType = editor.state.schema.marks.link;
 	if (!linkType) return;
+	if (from === to) {
+		// Zero-width links live in stored marks, so removal updates stored marks.
+		const marks = (
+			editor.state.storedMarks ?? editor.state.selection.$from.marks()
+		).filter((mark) => mark.type !== linkType);
+		const tr = editor.state.tr.setStoredMarks(
+			marks.length === 0 ? null : marks,
+		);
+		editor.view.dispatch(tr);
+		editor.commands.focus(undefined, { scrollIntoView: false });
+		return;
+	}
 	const tr = editor.state.tr.removeMark(from, to, linkType);
 	editor.view.dispatch(tr);
 	editor.commands.focus(undefined, { scrollIntoView: false });
@@ -597,6 +609,18 @@ export function LinkPopover({
 		setHrefValue(href);
 		const linkType = editor.state.schema.marks.link;
 		if (!linkType) return;
+		if (activeLink.from === activeLink.to) {
+			// Zero-width links edit stored marks because there is no text range yet.
+			const marks = (
+				editor.state.storedMarks ?? editor.state.selection.$from.marks()
+			).filter((mark) => mark.type !== linkType);
+			const tr = editor.state.tr.setStoredMarks([
+				...marks,
+				linkType.create({ href }),
+			]);
+			editor.view.dispatch(tr);
+			return;
+		}
 		const tr = editor.state.tr.removeMark(
 			activeLink.from,
 			activeLink.to,

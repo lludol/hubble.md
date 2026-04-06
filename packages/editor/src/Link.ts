@@ -76,7 +76,14 @@ export function getActiveLinkRange(state: EditorState): {
 	} else if ($pos.nodeBefore && markType.isInSet($pos.nodeBefore.marks)) {
 		index = $pos.index() - 1;
 	}
-	if (index === null || index < 0 || index >= parent.childCount) return null;
+	if (index === null || index < 0 || index >= parent.childCount) {
+		// No link text node at the cursor; fall back to a zero-width stored link.
+		const mark = markType.isInSet(state.storedMarks ?? selection.$from.marks());
+		if (!mark) return null;
+		const href = getLinkHrefFromAttrs(mark.attrs);
+		if (href === null) return null;
+		return { from: selection.from, to: selection.from, href };
+	}
 
 	let startIndex = index;
 	let endIndex = index;
