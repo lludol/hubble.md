@@ -270,9 +270,11 @@ type PositionUpdateReason =
 	| "layout";
 
 const PREVIEW_SHELL_INLINE_SIZE = 250;
+const PREVIEW_INLINE_SIZE_START = 100;
 const PREVIEW_INLINE_SIZE_END = 174;
 const PREVIEW_HORIZONTAL_OVERFLOW =
 	(PREVIEW_SHELL_INLINE_SIZE - PREVIEW_INLINE_SIZE_END) / 2;
+const PREVIEW_REVEAL_DURATION_MS = 180;
 
 // Returns true when a selection change should detach the anchor,
 // suppressing position transitions on the next update.
@@ -377,6 +379,7 @@ export function LinkPopover({
 	const { inputMode } = useEditorInputMode({ editor, containerRef });
 	const inputRef = useRef<HTMLInputElement | null>(null);
 	const popoverRef = useRef<HTMLDivElement | null>(null);
+	const previewButtonRef = useRef<HTMLButtonElement | null>(null);
 	const positionUpdateRef = useRef<
 		((reason?: PositionUpdateReason) => void) | null
 	>(null);
@@ -384,6 +387,9 @@ export function LinkPopover({
 	const anchorRef = useRef(INITIAL_LINK_ANCHOR_STATE);
 	const lastSelectionActiveKeyRef = useRef<string | null>(null);
 	const positionRequestIdRef = useRef(0);
+	const previewRevealAnimationRef = useRef<Animation | null>(null);
+	const previousPopoverModeRef = useRef<PopoverMode>(machineState.mode);
+	const previousPreviewKeyRef = useRef<string | null>(machineState.activeKey);
 	const [animatePosition, setAnimatePosition] = useState(false);
 
 	// Creation-mode state
@@ -395,10 +401,86 @@ export function LinkPopover({
 	useEffect(() => {
 		machineStateRef.current = machineState;
 	}, [machineState]);
+	const playPreviewReveal = useCallback(() => {
+		const previewButton = previewButtonRef.current;
+		if (!previewButton) return;
+		if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+		previewRevealAnimationRef.current?.cancel();
+		const easing =
+			getComputedStyle(previewButton)
+				.getPropertyValue("--ease-spring-snappy")
+				.trim() || "ease-out";
+		const animation = previewButton.animate(
+			[
+				{
+					inlineSize: `${PREVIEW_INLINE_SIZE_START}px`,
+					opacity: 0.82,
+					transform: "translateY(2px) scale(0.985)",
+				},
+				{
+					inlineSize: `${PREVIEW_INLINE_SIZE_END}px`,
+					opacity: 1,
+					transform: "translateY(0) scale(1)",
+				},
+			],
+			{
+				duration: PREVIEW_REVEAL_DURATION_MS,
+				easing,
+			},
+		);
+		previewRevealAnimationRef.current = animation;
+		animation.addEventListener(
+			"finish",
+			() => {
+				if (previewRevealAnimationRef.current === animation) {
+					previewRevealAnimationRef.current = null;
+				}
+				positionUpdateRef.current?.("layout");
+			},
+			{ once: true },
+		);
+		animation.addEventListener(
+			"cancel",
+			() => {
+				if (previewRevealAnimationRef.current === animation) {
+					previewRevealAnimationRef.current = null;
+				}
+			},
+			{ once: true },
+		);
+	}, []);
+
+	useEffect(() => {
+		return () => {
+			previewRevealAnimationRef.current?.cancel();
+		};
+	}, []);
+
+	useEffect(() => {
+		const previousMode = previousPopoverModeRef.current;
+		const previousPreviewKey = previousPreviewKeyRef.current;
+		const shouldRevealFromHidden =
+			previousMode === "hidden" && machineState.mode === "preview";
+		const shouldReplayPreviewReveal =
+			previousMode === "preview" &&
+			machineState.mode === "preview" &&
+			inputMode === "pointer" &&
+			previousPreviewKey !== null &&
+			machineState.activeKey !== null &&
+			previousPreviewKey !== machineState.activeKey;
+
+		if (shouldRevealFromHidden || shouldReplayPreviewReveal) {
+			playPreviewReveal();
+		}
+
+		previousPopoverModeRef.current = machineState.mode;
+		previousPreviewKeyRef.current = machineState.activeKey;
+	}, [machineState.mode, machineState.activeKey, inputMode, playPreviewReveal]);
 
 	const dispatchMachineEvent = useCallback((event: MachineEvent) => {
 		const previousState = machineStateRef.current;
-		machineStateRef.current = machineReducer(previousState, event);
+		const nextState = machineReducer(previousState, event);
+		machineStateRef.current = nextState;
 		dispatch(event);
 	}, []);
 	const setAnchorState = useCallback((event: LinkAnchorEvent) => {
@@ -818,15 +900,13 @@ export function LinkPopover({
 			) : machineState.mode === "preview" ? (
 				<div className="flex justify-center">
 					<Button
+						ref={previewButtonRef}
 						variant="outline"
 						size="sm"
 						className={cn(
 							"h-7 min-w-0 justify-start gap-0 overflow-hidden border-border bg-card px-0 text-left shadow-panel inset-shadow-chrome hover:bg-card",
 							styles.previewButton,
 						)}
-						onTransitionEnd={() => {
-							positionUpdateRef.current?.();
-						}}
 						onClick={() => dispatchMachineEvent({ type: "EXPAND_REQUESTED" })}
 					>
 						<span
