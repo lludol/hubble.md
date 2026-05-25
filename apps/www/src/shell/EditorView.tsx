@@ -6,6 +6,8 @@ import {
 	updateEditorContent,
 } from "../store/actions";
 import { filesStore } from "../store/state";
+import { handleImageDrop, handleImagePaste } from "./handleImageUpload";
+import { createWebImageExtension } from "./WebImageExtension";
 
 type Props = {
 	path: string;
@@ -25,6 +27,9 @@ export function EditorView({ path, initialMarkdown }: Props) {
 			path={path}
 			initialMarkdown={initialMarkdown}
 			wikiTargets={wikiTargets}
+			extensions={[createWebImageExtension()]}
+			onPaste={(editor, event) => handleImagePaste({ editor, event })}
+			onDrop={(editor, event) => handleImageDrop({ editor, event })}
 			onLocalChange={updateEditorContent}
 			onSave={savePathContent}
 			onOpenExternalLink={(href) => {

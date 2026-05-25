@@ -15,3 +15,7 @@ A folder on a device's local filesystem that is bound to a [[Workspace]]. The bi
 ### Plain Folder
 
 A folder open in the desktop app that is *not* bound to a Workspace — no `.hubble/config.json`. The desktop app can read and edit it as a general markdown viewer; nothing syncs.
+
+### Asset
+
+A binary file referenced by a note, such as an image. Asset paths in markdown use the desktop-canonical `<note-stem>.assets/<hash>.<ext>` convention relative to the note's folder.

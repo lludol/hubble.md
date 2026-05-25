@@ -126,3 +126,90 @@
 	max-inline-size: min(100%, 900px);
 	block-size: auto;
 }
+
+[data-hubble-editor] .pm-image-frame {
+	display: block;
+	max-inline-size: min(100%, 900px);
+}
+
+[data-hubble-editor] .pm-image-frame-measured > img {
+	inline-size: 100%;
+	block-size: 100%;
+	object-fit: contain;
+}
+
+[data-hubble-editor] .pm-image-missing {
+	display: flex;
+	box-sizing: border-box;
+	block-size: 100%;
+	min-block-size: 96px;
+	inline-size: 100%;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--muted);
+	color: var(--muted-foreground);
+	font-size: 0.8125rem;
+}
+
+[data-hubble-editor] .pm-image-upload-placeholder {
+	position: relative;
+	display: flex;
+	box-sizing: border-box;
+	inline-size: 100%;
+	block-size: 100%;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--muted);
+	color: var(--muted-foreground);
+	font-size: 0.8125rem;
+	animation: hubble-image-upload-fade-in 220ms ease-out both;
+}
+
+[data-hubble-editor] .pm-image-upload-placeholder-shimmer {
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: -40%;
+	inline-size: 40%;
+	background: linear-gradient(
+		90deg,
+		transparent,
+		color-mix(in oklab, var(--background) 72%, transparent),
+		transparent
+	);
+	animation: hubble-image-upload-shimmer 1.3s ease-in-out infinite;
+}
+
+[data-hubble-editor] .pm-image-upload-spinner {
+	position: relative;
+	inline-size: 1.5rem;
+	block-size: 1.5rem;
+	animation: hubble-image-upload-spin 900ms linear infinite;
+}
+
+@keyframes hubble-image-upload-fade-in {
+	from {
+		opacity: 0;
+		transform: translateY(2px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+@keyframes hubble-image-upload-spin {
+	to {
+		transform: rotate(1turn);
+	}
+}
+
+@keyframes hubble-image-upload-shimmer {
+	to {
+		inset-inline-start: 100%;
+	}
+}

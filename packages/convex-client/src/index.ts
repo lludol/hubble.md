@@ -9,6 +9,11 @@ export type Subscriber = {
 		callback: () => void,
 		onError: (err: Error) => void,
 	): () => void;
+	onAssetsChanged(
+		workspaceId: string,
+		callback: () => void,
+		onError: (err: Error) => void,
+	): () => void;
 	close(): Promise<void>;
 };
 
@@ -81,6 +86,14 @@ export function createConvexSubscriber(url: string): Subscriber {
 			// where changes during subscription setup get dropped.
 			return client.onUpdate(
 				api.sync.getFilesByWorkspace,
+				{ workspaceId: workspaceId as Id<"workspaces"> },
+				() => callback(),
+				onError,
+			);
+		},
+		onAssetsChanged(workspaceId, callback, onError) {
+			return client.onUpdate(
+				api.sync.getAssetsByWorkspace,
 				{ workspaceId: workspaceId as Id<"workspaces"> },
 				() => callback(),
 				onError,

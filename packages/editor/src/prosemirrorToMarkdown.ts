@@ -71,6 +71,7 @@ function blockToMarkdown(node: JSONContent): string {
 		case "image": {
 			const src = node.attrs?.src ?? "";
 			const alt = node.attrs?.alt ?? "";
+			if (!src || node.attrs?.uploadId) return "";
 
 			return `![${alt}](${src})`;
 		}

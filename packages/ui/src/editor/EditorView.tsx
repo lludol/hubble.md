@@ -35,6 +35,7 @@ export type EditorViewProps = {
 	extensions?: EditorOptions["extensions"];
 	editorProps?: EditorOptions["editorProps"];
 	onPaste?: (editor: Editor, event: ClipboardEvent) => boolean;
+	onDrop?: (editor: Editor, event: DragEvent) => boolean;
 	saveDebounceMs?: number;
 	onLocalChange: (path: string, markdown: string) => void;
 	onSave: (path: string, markdown: string) => void | Promise<void>;
@@ -51,6 +52,7 @@ export function EditorView({
 	extensions = [],
 	editorProps,
 	onPaste,
+	onDrop,
 	saveDebounceMs = DEFAULT_SAVE_DEBOUNCE_MS,
 	onLocalChange,
 	onSave,
@@ -108,7 +110,9 @@ export function EditorView({
 		],
 		content: initialDoc,
 		onUpdate: ({ editor: current }) => {
-			const markdown = tiptapDocToMarkdown(current.getJSON() as JSONContent);
+			const doc = current.getJSON() as JSONContent;
+			if (hasUploadImage(doc)) return;
+			const markdown = tiptapDocToMarkdown(doc);
 			latestMarkdownRef.current = markdown;
 			onLocalChange(pathRef.current, markdown);
 			scheduleSave();
@@ -125,6 +129,12 @@ export function EditorView({
 				const currentEditor = editorRef.current;
 				if (!currentEditor || !onPaste) return false;
 				return onPaste(currentEditor, event);
+			},
+			handleDrop: (view, event, slice, moved): boolean => {
+				if (editorProps?.handleDrop?.(view, event, slice, moved)) return true;
+				const currentEditor = editorRef.current;
+				if (!currentEditor || !onDrop) return false;
+				return onDrop(currentEditor, event);
 			},
 		},
 	});
@@ -191,4 +201,9 @@ export function EditorView({
 			<FormattingStatusBar editor={editor} scrollContainer={editorViewportEl} />
 		</div>
 	);
+}
+
+function hasUploadImage(node: JSONContent): boolean {
+	if (node.type === "image" && node.attrs?.uploadId) return true;
+	return node.content?.some(hasUploadImage) ?? false;
 }

@@ -8,6 +8,7 @@ import {
 	initActions,
 	loadPath,
 	markRemoteDeleted,
+	refreshAssets,
 	refreshFiles,
 	reloadFromRemote,
 	savePathContent,
@@ -43,6 +44,7 @@ export function AppShell({
 		initActions(url, workspaceId);
 		void (async () => {
 			const files = await refreshFiles();
+			await refreshAssets();
 			const lastOpenedPath = workspaceStore.get().lastOpenedPaths[workspaceId];
 			if (
 				lastOpenedPath &&
@@ -68,8 +70,18 @@ export function AppShell({
 				console.error("subscription error:", err);
 			},
 		);
+		const unsubscribeAssets = subscriber.onAssetsChanged(
+			workspaceId,
+			() => {
+				void refreshAssets();
+			},
+			(err) => {
+				console.error("asset subscription error:", err);
+			},
+		);
 		return () => {
 			unsubscribe();
+			unsubscribeAssets();
 			void subscriber.close();
 		};
 	}, [url, workspaceId]);

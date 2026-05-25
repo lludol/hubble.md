@@ -4,6 +4,7 @@ import { categorizeError, describeError } from "../connection/convex-error";
 import { getDeviceId } from "../connection/deviceId";
 import { latest } from "../lib/latest";
 import {
+	type AssetEntry,
 	type FileEntry,
 	resetState,
 	type ViewerState,
@@ -50,6 +51,12 @@ async function computeContentHash(content: string): Promise<string> {
 	const hash = await crypto.subtle.digest("SHA-256", data);
 	const bytes = new Uint8Array(hash);
 	return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function computeBytesHash(bytes: ArrayBuffer): Promise<string> {
+	const hash = await crypto.subtle.digest("SHA-256", bytes);
+	const hashBytes = new Uint8Array(hash);
+	return Array.from(hashBytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 /**
@@ -117,6 +124,133 @@ export async function refreshFiles(): Promise<FileEntry[]> {
 		console.error("refreshFiles failed:", describeError(categorizeError(err)));
 		return [];
 	}
+}
+
+export async function refreshAssets(): Promise<AssetEntry[]> {
+	const { backend, workspaceId } = requireCtx();
+	try {
+		const remote = await backend.getAssets(workspaceId);
+		const assets = remote.map((asset) => ({
+			path: asset.path,
+			storageId: asset.storageId,
+			contentHash: asset.contentHash,
+			updatedAt: asset.updatedAt,
+			deleted: asset.deleted,
+		}));
+		workspaceStore.set((state) => ({ ...state, assets }));
+		for (const asset of assets) {
+			if (asset.deleted) assetDownloadUrlCache.delete(asset.path);
+		}
+		return assets;
+	} catch (err) {
+		console.error("refreshAssets failed:", describeError(categorizeError(err)));
+		return [];
+	}
+}
+
+const assetDownloadUrlCache = new Map<
+	string,
+	{ storageId: string; url: string | null }
+>();
+
+export async function resolveAssetDownloadUrl(
+	notePath: string,
+	path: string,
+): Promise<string | null> {
+	const { backend } = requireCtx();
+	const assetPath = resolveMarkdownAssetPath(notePath, path);
+	const asset = workspaceStore
+		.get()
+		.assets.find((entry) => entry.path === assetPath && !entry.deleted);
+	if (!asset) return null;
+	const cached = assetDownloadUrlCache.get(assetPath);
+	if (cached?.storageId === asset.storageId) return cached.url;
+	const url = await backend.getAssetDownloadUrl(asset.storageId);
+	assetDownloadUrlCache.set(assetPath, { storageId: asset.storageId, url });
+	return url;
+}
+
+export async function uploadAssetFile(args: {
+	path: string;
+	file: File;
+}): Promise<string> {
+	const { backend, workspaceId, deviceId } = requireCtx();
+	const bytes = await args.file.arrayBuffer();
+	const contentHash = await computeBytesHash(bytes);
+	const paths = assetPathsForNote(args.path, contentHash, args.file);
+	const uploadUrl = await backend.generateAssetUploadUrl();
+	const uploadResponse = await fetch(uploadUrl, {
+		method: "POST",
+		headers: { "Content-Type": args.file.type || "application/octet-stream" },
+		body: bytes,
+	});
+	if (!uploadResponse.ok) {
+		throw new Error(`Asset upload failed: ${uploadResponse.status}`);
+	}
+	const uploadJson = (await uploadResponse.json()) as { storageId?: string };
+	if (!uploadJson.storageId)
+		throw new Error("Asset upload returned no storageId");
+	await backend.pushAsset({
+		workspaceId,
+		path: paths.assetPath,
+		storageId: uploadJson.storageId,
+		contentHash,
+		deviceId,
+	});
+	await refreshAssets();
+	return paths.markdownPath;
+}
+
+function assetPathsForNote(notePath: string, hash: string, file: File) {
+	const normalized = notePath.split("\\").join("/");
+	const slashIndex = normalized.lastIndexOf("/");
+	const folder = slashIndex === -1 ? "" : normalized.slice(0, slashIndex + 1);
+	const name =
+		slashIndex === -1 ? normalized : normalized.slice(slashIndex + 1);
+	const stem = name.replace(/\.(md|markdown|mdown)$/i, "") || "note";
+	const markdownPath = `${stem}.assets/${hash.slice(0, 12)}.${imageExtension(file)}`;
+	return {
+		assetPath: `${folder}${markdownPath}`,
+		markdownPath,
+	};
+}
+
+function resolveMarkdownAssetPath(
+	notePath: string,
+	markdownPath: string,
+): string {
+	if (/^(data:|https?:|file:|blob:|\/)/i.test(markdownPath))
+		return markdownPath;
+	const normalizedNotePath = notePath.split("\\").join("/");
+	const slashIndex = normalizedNotePath.lastIndexOf("/");
+	const folder =
+		slashIndex === -1 ? "" : normalizedNotePath.slice(0, slashIndex + 1);
+	return normalizeWorkspacePath(`${folder}${markdownPath}`);
+}
+
+function normalizeWorkspacePath(path: string): string {
+	const stack: string[] = [];
+	for (const part of path.split("/")) {
+		if (!part || part === ".") continue;
+		if (part === "..") {
+			stack.pop();
+			continue;
+		}
+		stack.push(part);
+	}
+	return stack.join("/");
+}
+
+function imageExtension(file: File): string {
+	const fromName = file.name.split(".").pop()?.toLowerCase();
+	if (fromName && /^(png|jpe?g|gif|webp|svg|bmp)$/.test(fromName)) {
+		return fromName === "jpeg" ? "jpg" : fromName;
+	}
+	const fromMime = file.type.split("/")[1]?.toLowerCase();
+	if (fromMime && /^(png|jpe?g|gif|webp|svg|bmp)$/.test(fromMime)) {
+		return fromMime === "jpeg" ? "jpg" : fromMime;
+	}
+	return "png";
 }
 
 const LOADING_DELAY_MS = 150;
