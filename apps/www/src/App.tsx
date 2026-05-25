@@ -10,6 +10,9 @@ type Route =
 	| { kind: "shell"; url: string; workspaceId: string };
 
 function initialRoute(): Route {
+	const testRoute = readTestBootstrap();
+	if (testRoute) return testRoute;
+
 	const stored = readConnection();
 	if (!stored) return { kind: "connect" };
 	if (!stored.workspaceId) {
@@ -20,6 +23,24 @@ function initialRoute(): Route {
 		url: stored.url,
 		workspaceId: stored.workspaceId,
 	};
+}
+
+// Agent test bootstrap: navigating to /?test=1 skips the connect + workspace
+// screens by reading VITE_TEST_CONVEX_URL / VITE_TEST_WORKSPACE_ID from
+// apps/www/.env.local. Without the query param the env vars are inert, so
+// human dev sessions are unaffected.
+function readTestBootstrap(): Route | null {
+	const params = new URLSearchParams(window.location.search);
+	if (params.get("test") !== "1") return null;
+	const url = import.meta.env.VITE_TEST_CONVEX_URL;
+	const workspaceId = import.meta.env.VITE_TEST_WORKSPACE_ID;
+	if (!url || !workspaceId) {
+		console.warn(
+			"?test=1 set but VITE_TEST_CONVEX_URL / VITE_TEST_WORKSPACE_ID are missing — falling back to normal routing.",
+		);
+		return null;
+	}
+	return { kind: "shell", url, workspaceId };
 }
 
 export default function App() {
