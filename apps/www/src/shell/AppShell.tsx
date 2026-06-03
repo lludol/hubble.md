@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { saveWorkspace } from "../connection/connection";
 import {
 	applyRemoteChange,
+	clearCurrentPath,
 	getActionCtx,
 	loadPath,
 	loadWorkspaceSnapshot,
@@ -23,22 +24,45 @@ import { Toolbar } from "./Toolbar";
 type Props = {
 	url: string;
 	workspaceId: string;
+	filePath: string | null;
+	onSelectFile: (path: string) => void;
 	onSwitch: (id: string) => void;
+	onWorkspaceLoaded: (workspaceId: string) => void;
 	onDisconnect: () => void;
 };
 
-export function AppShell({ url, workspaceId, onSwitch, onDisconnect }: Props) {
+export function AppShell({
+	url,
+	workspaceId,
+	filePath,
+	onSelectFile,
+	onSwitch,
+	onWorkspaceLoaded,
+	onDisconnect,
+}: Props) {
 	const viewer = useStoreValue(viewerStore);
 	const workspace = useStoreValue(workspaceStore);
 	const [newNoteName, setNewNoteName] = useState<string | null>(null);
 	const [newNoteSubmitted, setNewNoteSubmitted] = useState(false);
 	const newNoteInputRef = useRef<HTMLInputElement>(null);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: snapshot reloads only when workspace identity changes; file route changes load below
 	useEffect(() => {
-		void loadWorkspaceSnapshot(url, workspaceId).then((loaded) => {
-			if (loaded) saveWorkspace(workspaceId);
+		void loadWorkspaceSnapshot(url, workspaceId, filePath).then((loaded) => {
+			if (!loaded) return;
+			saveWorkspace(workspaceId);
+			onWorkspaceLoaded(workspaceId);
 		});
 	}, [url, workspaceId]);
+
+	useEffect(() => {
+		if (workspace.snapshot?.id !== workspaceId) return;
+		if (filePath) {
+			if (viewerStore.get().currentPath !== filePath) void loadPath(filePath);
+			return;
+		}
+		clearCurrentPath();
+	}, [filePath, workspace.snapshot?.id, workspaceId]);
 
 	useEffect(() => {
 		return () => {
@@ -103,7 +127,7 @@ export function AppShell({ url, workspaceId, onSwitch, onDisconnect }: Props) {
 		setNewNoteName(null);
 		setNewNoteSubmitted(false);
 		await refreshFiles();
-		await loadPath(path);
+		onSelectFile(path);
 	};
 
 	const onRemoteFilesChanged = async () => {
@@ -153,6 +177,7 @@ export function AppShell({ url, workspaceId, onSwitch, onDisconnect }: Props) {
 					url={url}
 					workspaceId={workspace.snapshot.id}
 					workspaceName={workspace.snapshot.name}
+					onSelectFile={onSelectFile}
 					onSwitch={onSwitch}
 					onDisconnect={onDisconnect}
 				/>
@@ -163,7 +188,7 @@ export function AppShell({ url, workspaceId, onSwitch, onDisconnect }: Props) {
 				<ExternalChangeBanner
 					message={workspace.error}
 					onReload={() => {
-						void loadWorkspaceSnapshot(url, workspaceId);
+						void loadWorkspaceSnapshot(url, workspaceId, filePath);
 					}}
 				/>
 			)}

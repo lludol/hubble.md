@@ -1,19 +1,16 @@
-import { invoke } from "@tauri-apps/api/core";
-import { save } from "@tauri-apps/plugin-dialog";
+import { desktopApi } from "./desktopApi";
 import { loadPath, refreshFiles } from "./store/actions";
 import { workspaceStore } from "./store/state";
 
-export async function createNote() {
+export async function createMarkdownFile() {
 	const workspacePath = workspaceStore.get().workspacePath;
 	if (!workspacePath) return;
-	const picked = await save({
+	const picked = await desktopApi.saveMarkdownFilePicker({
 		defaultPath: workspacePath,
-		title: "New Markdown file",
-		filters: [{ name: "Markdown", extensions: ["md"] }],
 	});
 	if (typeof picked !== "string") return;
 	const path = picked.endsWith(".md") ? picked : `${picked}.md`;
-	await invoke("write_file_text", { path, content: "" });
+	await desktopApi.writeFileText(path, "");
 	await refreshFiles();
 	await loadPath(path);
 }

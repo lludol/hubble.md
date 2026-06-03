@@ -10,8 +10,10 @@
 		"includes": [
 			"**",
 			"!**/dist",
+			"!**/out",
 			"!**/build",
 			"!**/coverage",
+			"!**/.claude/skills",
 			"!**/.astro",
 			"!**/*.tsbuildinfo",
 			"!**/src-tauri/target",

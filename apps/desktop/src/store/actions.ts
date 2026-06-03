@@ -1,6 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
+import { desktopApi } from "../desktopApi";
 import { classifyFileChange } from "../externalFileChange";
 import { latest } from "../lib/latest";
 import {
@@ -26,7 +25,7 @@ export async function refreshFiles(path = workspaceStore.get().workspacePath) {
 	let files: FileEntry[] = [];
 
 	try {
-		files = await invoke<FileEntry[]>("list_directory", { path });
+		files = await desktopApi.listDirectory(path);
 	} catch {
 		files = [];
 	}
@@ -49,6 +48,28 @@ export function touchFile(path: string) {
 			),
 		};
 	});
+}
+
+function dirname(filePath: string): string | null {
+	const forwardSlash = filePath.lastIndexOf("/");
+	const backSlash = filePath.lastIndexOf("\\");
+	const separatorIndex = Math.max(forwardSlash, backSlash);
+	if (separatorIndex < 0) return null;
+	if (separatorIndex === 0) return filePath.slice(0, 1);
+	return filePath.slice(0, separatorIndex);
+}
+
+function extname(filePath: string): string {
+	const basename = filePath.split(/[\\/]/).pop() ?? filePath;
+	const dot = basename.lastIndexOf(".");
+	return dot > 0 ? basename.slice(dot) : "";
+}
+
+function joinPath(parent: string, name: string): string {
+	const separator = parent.includes("\\") && !parent.includes("/") ? "\\" : "/";
+	return parent.endsWith("/") || parent.endsWith("\\")
+		? `${parent}${name}`
+		: `${parent}${separator}${name}`;
 }
 
 if (workspaceStore.get().workspacePath) {
@@ -87,11 +108,7 @@ export async function openWorkspaceWithSidebar() {
 export async function openWorkspace(path?: string) {
 	let nextPath = path;
 	if (!nextPath) {
-		const selected = await open({
-			multiple: false,
-			directory: true,
-			title: "Open Folder",
-		});
+		const selected = await desktopApi.openFolderPicker();
 		if (typeof selected !== "string") return;
 		nextPath = selected;
 	}
@@ -155,9 +172,7 @@ export async function savePathContent(
 
 	if (!force) {
 		try {
-			const currentDiskContent = await invoke<string>("read_file_text", {
-				path,
-			});
+			const currentDiskContent = await desktopApi.readFileText(path);
 			const nextCurrent = viewerStore.get();
 			if (nextCurrent.currentPath !== path) return;
 			const action = classifyFileChange({
@@ -178,7 +193,7 @@ export async function savePathContent(
 	}
 
 	try {
-		await invoke("write_file_text", { path, content });
+		await desktopApi.writeFileText(path, content);
 		touchFile(path);
 		viewerStore.set((state) => {
 			if (state.currentPath !== path) return state;
@@ -198,6 +213,62 @@ export async function savePathContent(
 				error: message,
 			};
 		});
+	}
+}
+
+export async function renameCurrentMarkdownFile(nextName: string) {
+	const current = viewerStore.get();
+	if (!current.currentPath) return;
+
+	const trimmedName = nextName.trim();
+	if (trimmedName.length === 0 || /[\\/]/.test(trimmedName)) return;
+
+	const parent = dirname(current.currentPath);
+	if (!parent) return;
+
+	const currentExt = extname(current.currentPath);
+	const nextFileName = /\.[^/.\\]+$/.test(trimmedName)
+		? trimmedName
+		: `${trimmedName}${currentExt}`;
+	const nextPath = joinPath(parent, nextFileName);
+	if (nextPath === current.currentPath) return;
+
+	try {
+		await savePathContent(current.currentPath, current.content, {
+			force: true,
+		});
+		await desktopApi.renameFile(current.currentPath, nextPath);
+		appStore.set((state) => ({
+			...state,
+			workspace: {
+				...state.workspace,
+				files: state.workspace.files.map((file) =>
+					file.path === current.currentPath
+						? { ...file, path: nextPath }
+						: file,
+				),
+				lastOpenedPaths: Object.fromEntries(
+					Object.entries(state.workspace.lastOpenedPaths).map(
+						([workspacePath, openedPath]) => [
+							workspacePath,
+							openedPath === current.currentPath ? nextPath : openedPath,
+						],
+					),
+				),
+			},
+			document: {
+				...state.document,
+				currentPath: nextPath,
+				lastOpenedPath:
+					state.document.lastOpenedPath === current.currentPath
+						? nextPath
+						: state.document.lastOpenedPath,
+			},
+		}));
+		await refreshFiles();
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		toast.error("Failed to rename file", { description: message });
 	}
 }
 
@@ -240,7 +311,7 @@ export const loadPath = latest(async ({ isStale }, path: string) => {
 	}, LOADING_DELAY_MS);
 
 	try {
-		const content = await invoke<string>("read_file_text", { path });
+		const content = await desktopApi.readFileText(path);
 		if (isStale()) return;
 		appStore.set((state) => withOpenedDoc(state, path, content));
 	} catch (err) {

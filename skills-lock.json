@@ -19,6 +19,12 @@
 			"skillPath": "skills/engineering/to-issues/SKILL.md",
 			"computedHash": "47f648f3414848ccfc62cb41d2828b7e575fb5e7cbd6c4bdf630c063b5dc5e82"
 		},
+		"triage": {
+			"source": "mattpocock/skills",
+			"sourceType": "github",
+			"skillPath": "skills/engineering/triage/SKILL.md",
+			"computedHash": "2b6efb6da12d92551772fcc04acf331f4e0e6f7bd9d4cb23ce0b301e0b128feb"
+		},
 		"vercel-react-best-practices": {
 			"source": "vercel-labs/agent-skills",
 			"sourceType": "github",

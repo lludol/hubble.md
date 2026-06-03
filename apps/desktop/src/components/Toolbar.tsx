@@ -1,12 +1,17 @@
 import { NewNoteButton, Toolbar as SharedToolbar } from "@hubble.md/ui";
 import { useStoreValue } from "@simplestack/store/react";
-import { createNote } from "../noteActions";
-import { toggleSidebar } from "../store/actions";
+import type { CSSProperties } from "react";
+import { createMarkdownFile } from "../fileActions";
+import { renameCurrentMarkdownFile, toggleSidebar } from "../store/actions";
 import {
 	currentPathStore,
 	sidebarOpenStore,
 	workspacePathStore,
 } from "../store/state";
+
+const dragRegionStyle = {
+	WebkitAppRegion: "drag",
+} as CSSProperties;
 
 export function Toolbar({
 	scrollContainer,
@@ -22,11 +27,14 @@ export function Toolbar({
 			currentPath={currentPath ?? null}
 			sidebarOpen={sidebarOpen}
 			scrollContainer={scrollContainer}
-			rootProps={{ "data-tauri-drag-region": true }}
+			rootProps={{ style: dragRegionStyle }}
 			onToggleSidebar={toggleSidebar}
+			onRenameCurrentPath={(nextName) =>
+				void renameCurrentMarkdownFile(nextName)
+			}
 			rightSlot={
 				workspacePath ? (
-					<NewNoteButton onClick={() => void createNote()} />
+					<NewNoteButton onClick={() => void createMarkdownFile()} />
 				) : undefined
 			}
 		/>

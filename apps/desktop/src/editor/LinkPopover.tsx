@@ -7,7 +7,6 @@ import {
 } from "@floating-ui/dom";
 import { getActiveLinkRange } from "@hubble.md/editor";
 import { useStoreValue } from "@simplestack/store/react";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
 import { keymatch } from "keymatch";
@@ -26,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import MingcutePencilFill from "~icons/mingcute/pencil-fill";
+import { desktopApi } from "../desktopApi";
 import { cn } from "../lib/utils";
 import { loadPath } from "../store/actions";
 import { workspaceStore } from "../store/state";
@@ -288,7 +288,7 @@ async function visitLink(href: string) {
 			toast.error("Only http(s) links can be opened");
 			return;
 		}
-		await openUrl(href);
+		await desktopApi.openExternalUrl(href);
 	} catch {
 		toast.error("Invalid link URL");
 	}

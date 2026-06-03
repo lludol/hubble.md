@@ -1,11 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
 import type { Editor } from "@tiptap/core";
 import { TextSelection } from "@tiptap/pm/state";
-
-type PersistPastedImageResponse = {
-	relativeMarkdownPath?: string;
-	relative_markdown_path?: string;
-};
+import { desktopApi } from "../desktopApi";
 
 export async function persistPastedImage({
 	filePath,
@@ -15,16 +10,12 @@ export async function persistPastedImage({
 	imageFile: File;
 }): Promise<string> {
 	const bytes = Array.from(new Uint8Array(await imageFile.arrayBuffer()));
-	const result = await invoke<PersistPastedImageResponse>(
-		"persist_pasted_image",
-		{
-			filePath,
-			bytes,
-			mimeType: imageFile.type || null,
-		},
-	);
-	const relativeMarkdownPath =
-		result.relativeMarkdownPath ?? result.relative_markdown_path ?? "";
+	const result = await desktopApi.persistPastedImage({
+		filePath,
+		bytes,
+		mimeType: imageFile.type || null,
+	});
+	const relativeMarkdownPath = result.relativeMarkdownPath;
 	if (relativeMarkdownPath.trim().length === 0) {
 		throw new Error("Image persisted but returned empty markdown path.");
 	}

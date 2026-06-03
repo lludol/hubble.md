@@ -20,6 +20,8 @@ pnpm-debug.log*
 # build outputs
 dist/
 build/
+out/
+release/
 coverage/
 **/.astro/
 **/*.tsbuildinfo

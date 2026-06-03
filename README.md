@@ -10,9 +10,7 @@ Install:
 
 - [Node.js](https://nodejs.org/en/download)
 - [pnpm](https://pnpm.io/installation)
-- [Rust via rustup](https://www.rust-lang.org/tools/install)
 - macOS desktop builds: Xcode Command Line Tools via `xcode-select --install`
-- Windows / Linux desktop builds: the system dependencies from the [Tauri prerequisites guide](https://v2.tauri.app/start/prerequisites/)
 
 Then from the repo root, run:
 
@@ -21,7 +19,7 @@ pnpm install
 pnpm bundle:desktop
 ```
 
-This creates a production desktop bundle. On macOS, open `apps/desktop/src-tauri/target/release/bundle/macos/Hubble.app` when the build finishes. For more desktop-specific build and dev detail, see [`apps/desktop/README.md`](./apps/desktop/README.md).
+This creates a production desktop bundle under `apps/desktop/release/`. For more desktop-specific build and dev detail, see [`apps/desktop/README.md`](./apps/desktop/README.md).
 
 ## Monorepo structure
 
@@ -30,7 +28,7 @@ This repo uses a pnpm workspace:
 ```text
 .
 ├── apps
-│   ├── desktop  # Tauri desktop app
+│   ├── desktop  # Electron desktop app
 │   └── www      # Project site / landing page
 └── packages
     └── editor   # Shared editor package

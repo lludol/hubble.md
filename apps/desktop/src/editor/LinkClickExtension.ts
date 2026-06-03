@@ -1,8 +1,8 @@
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { Extension } from "@tiptap/core";
 import { Plugin } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 import { toast } from "sonner";
+import { desktopApi } from "../desktopApi";
 import { loadPath } from "../store/actions";
 import { workspaceStore } from "../store/state";
 
@@ -26,7 +26,7 @@ async function followLink(href: string) {
 	}
 	try {
 		new URL(resolved);
-		await openUrl(resolved);
+		await desktopApi.openExternalUrl(resolved);
 	} catch {
 		await loadPath(resolved);
 	}

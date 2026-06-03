@@ -1,7 +1,6 @@
 import { Sidebar as SharedSidebar } from "@hubble.md/ui";
 import { useStoreValue } from "@simplestack/store/react";
 import { useState } from "react";
-import { loadPath } from "../store/actions";
 import {
 	currentPathStore,
 	filesLoadedStore,
@@ -14,12 +13,14 @@ export function Sidebar({
 	url,
 	workspaceId,
 	workspaceName,
+	onSelectFile,
 	onSwitch,
 	onDisconnect,
 }: {
 	url: string;
 	workspaceId: string;
 	workspaceName: string;
+	onSelectFile: (path: string) => void;
 	onSwitch: (id: string) => void;
 	onDisconnect: () => void;
 }) {
@@ -48,7 +49,7 @@ export function Sidebar({
 				/>
 			}
 			onSortModeChange={setSortMode}
-			onSelectFile={(path) => void loadPath(path)}
+			onSelectFile={onSelectFile}
 			emptyState={
 				filesLoaded ? (
 					<p className="px-2.5 py-2 text-xs text-muted-foreground">

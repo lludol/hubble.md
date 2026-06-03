@@ -1,8 +1,8 @@
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { type NodeViewProps, NodeViewWrapper } from "@tiptap/react";
 import { type CSSProperties, useEffect, useState } from "react";
 import { toast } from "sonner";
 import MingcuteLoading3Line from "~icons/mingcute/loading-3-line";
+import { desktopApi } from "../desktopApi";
 import { persistPastedImage } from "./handleImagePaste";
 
 const uploads = new Map<string, Promise<string>>();
@@ -62,6 +62,7 @@ export function ImageNodeView({
 	}, [filePath, rawSrc, updateAttributes, uploadFile, uploadId]);
 
 	useEffect(() => {
+		let cancelled = false;
 		if (rawSrc.trim().length === 0) {
 			setResolvedSrc("");
 			return;
@@ -70,8 +71,19 @@ export function ImageNodeView({
 			setResolvedSrc(rawSrc);
 			return;
 		}
-		const absolutePath = joinToAbsolutePath(dirname(filePath), rawSrc);
-		setResolvedSrc(convertFileSrc(absolutePath));
+		setResolvedSrc("");
+		const unresolvedPath = joinPath(dirname(filePath), rawSrc);
+		void desktopApi
+			.resolvePath(unresolvedPath)
+			.then((absolutePath) => {
+				if (!cancelled) setResolvedSrc(desktopApi.toAssetUrl(absolutePath));
+			})
+			.catch(() => {
+				if (!cancelled) setResolvedSrc("");
+			});
+		return () => {
+			cancelled = true;
+		};
 	}, [rawSrc, filePath]);
 
 	return (
@@ -146,8 +158,9 @@ function normalizePosixPath(path: string): string {
 	return `/${stack.join("/")}`;
 }
 
-function joinToAbsolutePath(baseDir: string, relativePath: string): string {
+function joinPath(baseDir: string, relativePath: string): string {
 	const rel = relativePath.split("\\").join("/");
+	if (rel === "~" || rel.startsWith("~/")) return rel;
 	if (rel.startsWith("/")) return normalizePosixPath(rel);
 	return normalizePosixPath(`${baseDir}/${rel}`);
 }

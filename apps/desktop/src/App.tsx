@@ -1,19 +1,14 @@
 import { Button, EditorView, type WikiTarget } from "@hubble.md/ui";
 import { useStoreValue } from "@simplestack/store/react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/plugin-dialog";
-import { watch } from "@tauri-apps/plugin-fs";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import { keymatch } from "keymatch";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { createAppMenu } from "./appMenu";
 import { Sidebar } from "./components/Sidebar";
 import { Toolbar } from "./components/Toolbar";
+import { desktopApi } from "./desktopApi";
 import { handleImageDrop, handleImagePaste } from "./editor/handleImagePaste";
 import { createImageExtension } from "./editor/ImageExtension";
-import { createNote } from "./noteActions";
+import { createMarkdownFile } from "./fileActions";
 import { SIDEBAR_NAV_SELECTOR } from "./selectors";
 import {
 	forceKeepLocalEdits,
@@ -79,13 +74,10 @@ function App() {
 		};
 
 		const setup = async () => {
-			unwatch = await watch(
+			unwatch = await desktopApi.watchPath(
 				workspacePath,
-				(event) => {
-					const paths = Array.isArray(event.paths) ? event.paths : [];
-					void handleChange(paths);
-				},
 				{ recursive: true },
+				(paths) => void handleChange(paths),
 			);
 			if (disposed && unwatch) {
 				unwatch();
@@ -112,9 +104,7 @@ function App() {
 		const handleChange = async (paths: string[]) => {
 			if (!paths.includes(currentPath)) return;
 			try {
-				const nextContent = await invoke<string>("read_file_text", {
-					path: currentPath,
-				});
+				const nextContent = await desktopApi.readFileText(currentPath);
 				handleExternalFileChange(currentPath, nextContent);
 			} catch {
 				await loadPath(currentPath);
@@ -122,13 +112,10 @@ function App() {
 		};
 
 		const setup = async () => {
-			unwatch = await watch(
+			unwatch = await desktopApi.watchPath(
 				parentPath,
-				(event) => {
-					const paths = Array.isArray(event.paths) ? event.paths : [];
-					void handleChange(paths);
-				},
 				{ recursive: false },
+				(paths) => void handleChange(paths),
 			);
 			if (disposed && unwatch) {
 				unwatch();
@@ -146,37 +133,21 @@ function App() {
 
 	const openFilePicker = useCallback(async () => {
 		const defaultPath = workspaceStore.get().workspacePath ?? undefined;
-		const selected = await open({
-			multiple: false,
-			directory: false,
-			title: "Open Markdown file",
-			defaultPath,
-			filters: [
-				{ name: "Markdown", extensions: ["md", "markdown", "mdown"] },
-				{ name: "Text", extensions: ["txt", "text"] },
-			],
-		});
+		const selected = await desktopApi.openFilePicker({ defaultPath });
 		if (typeof selected === "string") {
 			await loadPath(selected);
 		}
 	}, []);
 
 	useEffect(() => {
-		const setupMenu = async () => {
-			const menu = await createAppMenu({
-				newNote: () => void createNote(),
-				open: () => void openFilePicker(),
-				newWorkspace: () => void openWorkspaceWithSidebar(),
-				openWorkspace: () => setWorkspaceSwitcherOpen(true),
-				hasWorkspace,
-			});
-			await menu.setAsAppMenu();
-		};
-		void setupMenu();
+		void desktopApi.setMenuState({ hasWorkspace });
+	}, [hasWorkspace]);
+
+	useEffect(() => {
 		const onKeyDown = async (event: KeyboardEvent) => {
 			if (keymatch(event, "CmdOrCtrl+N")) {
 				event.preventDefault();
-				await createNote();
+				await createMarkdownFile();
 			} else if (keymatch(event, "CmdOrCtrl+Shift+O")) {
 				if (!workspaceStore.get().workspacePath) return;
 				event.preventDefault();
@@ -201,40 +172,35 @@ function App() {
 		};
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
-	}, [openFilePicker, hasWorkspace]);
+	}, [openFilePicker]);
 
 	useEffect(() => {
-		let disposed = false;
-		let unlisten: (() => void) | null = null;
-		const setup = async () => {
-			const nextUnlisten = await listen<{ path?: string }>(
-				"hubble://open-file",
-				async (event) => {
-					const path = event.payload?.path;
-					if (path) {
-						await loadPath(path);
-					}
-				},
-			);
-			if (disposed) {
-				nextUnlisten();
-				return;
-			}
-			unlisten = nextUnlisten;
-		};
-		void setup();
+		const unlisten = desktopApi.onOpenFile((path) => {
+			void loadPath(path);
+		});
 		return () => {
-			disposed = true;
-			if (unlisten) {
-				unlisten();
-			}
+			unlisten();
 		};
 	}, []);
 
 	useEffect(() => {
+		const disposers = [
+			desktopApi.onMenuCreateMarkdownFile(() => void createMarkdownFile()),
+			desktopApi.onMenuOpenFile(() => void openFilePicker()),
+			desktopApi.onMenuOpenFolder(() => void openWorkspaceWithSidebar()),
+			desktopApi.onMenuShowWorkspaceSwitcher(() =>
+				setWorkspaceSwitcherOpen(true),
+			),
+		];
+		return () => {
+			for (const dispose of disposers) dispose();
+		};
+	}, [openFilePicker]);
+
+	useEffect(() => {
 		let active = true;
 		const init = async () => {
-			const launchPath = await invoke<string | null>("get_launch_file_path");
+			const launchPath = await desktopApi.getLaunchFilePath();
 			if (!active) return;
 
 			if (typeof launchPath === "string" && launchPath.length > 0) {
@@ -376,7 +342,7 @@ function MarkdownEditor({
 			onLocalChange={updateEditorContent}
 			onSave={savePathContent}
 			onScrollContainerChange={onScrollContainerChange}
-			onOpenExternalLink={openUrl}
+			onOpenExternalLink={desktopApi.openExternalUrl}
 			onOpenWikiLink={(target) => void loadPath(resolveWikiPath(target))}
 			onMessage={(message, kind) =>
 				kind === "success" ? toast.success(message) : toast.error(message)

@@ -60,6 +60,7 @@ type WorkspaceSnapshot = {
 async function fetchWorkspaceSnapshot(
 	url: string,
 	workspaceId: string,
+	selectedPath: string | null,
 ): Promise<WorkspaceSnapshot> {
 	const client = new ConvexHttpClient(url);
 	const workspacesPromise = client.query(api.sync.listWorkspaces, {});
@@ -85,10 +86,10 @@ async function fetchWorkspaceSnapshot(
 		updatedAt: asset.updatedAt,
 		deleted: asset.deleted,
 	}));
-	const lastOpenedPath = workspaceStore.get().lastOpenedPaths[workspaceId];
 	const currentFile =
-		(lastOpenedPath && files.find((file) => file.path === lastOpenedPath)) ||
-		null;
+		selectedPath === null
+			? null
+			: (files.find((file) => file.path === selectedPath) ?? null);
 
 	return {
 		workspace: { id: workspace._id, name: workspace.name },
@@ -99,7 +100,12 @@ async function fetchWorkspaceSnapshot(
 }
 
 export const loadWorkspaceSnapshot = latest(
-	async ({ isStale }, url: string, workspaceId: string): Promise<boolean> => {
+	async (
+		{ isStale },
+		url: string,
+		workspaceId: string,
+		selectedPath: string | null = null,
+	): Promise<boolean> => {
 		const previousSnapshot = workspaceStore.get().snapshot;
 		if (!previousSnapshot) {
 			workspaceStore.set((state) => ({
@@ -109,7 +115,11 @@ export const loadWorkspaceSnapshot = latest(
 			}));
 		}
 		try {
-			const snapshot = await fetchWorkspaceSnapshot(url, workspaceId);
+			const snapshot = await fetchWorkspaceSnapshot(
+				url,
+				workspaceId,
+				selectedPath,
+			);
 			if (isStale()) return false;
 			ctx = createCtx(url, workspaceId);
 			appStore.set((state) => ({
@@ -119,6 +129,12 @@ export const loadWorkspaceSnapshot = latest(
 					files: snapshot.files,
 					assets: snapshot.assets,
 					filesLoaded: true,
+					lastOpenedPaths: snapshot.currentFile
+						? {
+								...state.workspace.lastOpenedPaths,
+								[workspaceId]: snapshot.currentFile.path,
+							}
+						: state.workspace.lastOpenedPaths,
 					status: "ready",
 					error: null,
 				},
@@ -156,6 +172,20 @@ export const loadWorkspaceSnapshot = latest(
 		}
 	},
 );
+
+export function clearCurrentPath(): void {
+	viewerStore.set((state) => ({
+		...state,
+		currentPath: null,
+		pendingPath: null,
+		content: "",
+		savedContent: "",
+		basedOnHash: null,
+		externalChange: { kind: "none" },
+		status: "idle",
+		error: null,
+	}));
+}
 
 async function computeContentHash(content: string): Promise<string> {
 	const data = new TextEncoder().encode(content);
