@@ -12,6 +12,7 @@ import {
 	protocol,
 	shell,
 } from "electron";
+import ignore from "ignore";
 
 type FileEntry = {
 	path: string;
@@ -20,6 +21,11 @@ type FileEntry = {
 
 type MenuState = {
 	hasWorkspace: boolean;
+};
+
+type IgnoreRule = {
+	dir: string;
+	matcher: ReturnType<typeof ignore>;
 };
 
 const isDev = !app.isPackaged;
@@ -39,6 +45,9 @@ const watchers = new Map<string, FSWatcher>();
 const grantedFiles = new Set<string>();
 const grantedRoots = new Set<string>();
 let grantsLoaded = false;
+
+const ignoreConfigFiles = [".gitignore", ".ignore"];
+const ignoredWorkspaceDirs = new Set([".git", "dist", "node_modules"]);
 
 function grantsPath(): string {
 	return path.join(app.getPath("userData"), "grants.json");
@@ -116,6 +125,92 @@ function isWithin(rootPath: string, candidatePath: string): boolean {
 		relative === "" ||
 		(!relative.startsWith("..") && !path.isAbsolute(relative))
 	);
+}
+
+/** Covers always-ignored workspace dirs in case Git ignores do not catch them. */
+function isIgnoredWorkspacePath(candidatePath: string): boolean {
+	return candidatePath
+		.split(/[\\/]+/)
+		.some((segment) => ignoredWorkspaceDirs.has(segment));
+}
+
+function toIgnorePath(input: string): string {
+	return input.split(path.sep).join("/");
+}
+
+function isIgnoredByRules(candidatePath: string, rules: IgnoreRule[]) {
+	if (isIgnoredWorkspacePath(candidatePath)) return true;
+
+	let ignored = false;
+	for (const { dir, matcher } of rules) {
+		const relative = path.relative(dir, candidatePath);
+		if (
+			relative === "" ||
+			relative.startsWith("..") ||
+			path.isAbsolute(relative)
+		)
+			continue;
+		const ignorePath = toIgnorePath(relative);
+		const result = matcher.test(ignorePath);
+		const directoryResult = matcher.test(`${ignorePath}/`);
+		if (result.ignored || directoryResult.ignored) ignored = true;
+		if (result.unignored || directoryResult.unignored) ignored = false;
+	}
+	return ignored;
+}
+
+function isMarkdownPath(candidatePath: string): boolean {
+	return /\.(md|markdown|mdown)$/i.test(candidatePath);
+}
+
+/** Covers Git ignore config files: .gitignore and .ignore. */
+function isIgnoreConfigPath(candidatePath: string): boolean {
+	const name = path.basename(candidatePath);
+	return ignoreConfigFiles.includes(name);
+}
+
+function isMissingPathError(error: unknown): boolean {
+	return (
+		typeof error === "object" &&
+		error !== null &&
+		"code" in error &&
+		error.code === "ENOENT"
+	);
+}
+
+async function rulesForDir(dir: string, inherited: IgnoreRule[]) {
+	const matcher = ignore();
+	let hasRules = false;
+
+	for (const fileName of ignoreConfigFiles) {
+		try {
+			matcher.add(await fs.readFile(path.join(dir, fileName), "utf8"));
+			hasRules = true;
+		} catch (error) {
+			if (isMissingPathError(error)) continue;
+			throw error;
+		}
+	}
+
+	return hasRules ? [...inherited, { dir, matcher }] : inherited;
+}
+
+async function collectWorkspaceIgnoreRules(
+	dir: string,
+	inherited: IgnoreRule[] = [],
+): Promise<IgnoreRule[]> {
+	const rules = await rulesForDir(dir, inherited);
+	const collected =
+		rules.length > inherited.length ? [rules[rules.length - 1]] : [];
+
+	const entries = await fs.readdir(dir, { withFileTypes: true });
+	for (const entry of entries) {
+		if (!entry.isDirectory()) continue;
+		const entryPath = path.join(dir, entry.name);
+		if (isIgnoredByRules(entryPath, rules)) continue;
+		collected.push(...(await collectWorkspaceIgnoreRules(entryPath, rules)));
+	}
+	return collected;
 }
 
 function assertGranted(input: string): string {
@@ -291,14 +386,19 @@ function fileAssetsDir(filePath: string): string {
 	return path.join(parsed.dir, `${parsed.name}.assets`);
 }
 
-async function collectMarkdownFiles(dir: string, out: FileEntry[]) {
+async function collectMarkdownFiles(
+	dir: string,
+	out: FileEntry[],
+	inheritedRules: IgnoreRule[] = [],
+) {
+	const rules = await rulesForDir(dir, inheritedRules);
 	const entries = await fs.readdir(dir, { withFileTypes: true });
 	for (const entry of entries) {
-		if (entry.name.startsWith(".")) continue;
 		const entryPath = path.join(dir, entry.name);
+		if (isIgnoredByRules(entryPath, rules)) continue;
 		if (entry.isDirectory()) {
-			await collectMarkdownFiles(entryPath, out);
-		} else if (/\.(md|markdown|mdown)$/i.test(entry.name)) {
+			await collectMarkdownFiles(entryPath, out, rules);
+		} else if (isMarkdownPath(entry.name)) {
 			const stat = await fs.stat(entryPath);
 			out.push({
 				path: entryPath,
@@ -490,23 +590,58 @@ function registerIpc() {
 
 	ipcMain.handle(
 		"desktop:watch-path",
-		(_event, { watchId, path: watchPath, options }) => {
+		async (_event, { watchId, path: watchPath, options }) => {
+			const id = String(watchId);
 			const resolved = assertGranted(watchPath);
-			const watcher = chokidar.watch(resolved, {
-				ignoreInitial: true,
-				depth: options?.recursive ? undefined : 0,
-			});
 			const emit = (changedPath: string) => {
 				sendToRenderer(`desktop:watch-path:${watchId}`, [
 					path.resolve(changedPath),
 				]);
 			};
-			watcher.on("add", emit);
-			watcher.on("change", emit);
-			watcher.on("unlink", emit);
-			watcher.on("addDir", emit);
-			watcher.on("unlinkDir", emit);
-			watchers.set(String(watchId), watcher);
+
+			const replaceWatcher = async (currentWatcher: FSWatcher) => {
+				await currentWatcher.close();
+				if (watchers.get(id) !== currentWatcher) return;
+				const next = await createWatcher();
+				if (watchers.get(id) === currentWatcher) {
+					watchers.set(id, next);
+				} else {
+					await next.close();
+				}
+			};
+
+			const createWatcher = async () => {
+				const ignoreRules = options?.recursive
+					? await collectWorkspaceIgnoreRules(resolved)
+					: [];
+				const watcher = chokidar.watch(resolved, {
+					ignoreInitial: true,
+					depth: options?.recursive ? undefined : 0,
+					ignored: options?.recursive
+						? (path) => isIgnoredByRules(path, ignoreRules)
+						: undefined,
+				});
+				/** Changes to .ignore or .gitignore files can change which markdown files should be indexed. Replace the watcher in this case. */
+				const emitFile = (changedPath: string) => {
+					if (isMarkdownPath(changedPath)) {
+						emit(changedPath);
+					} else if (isIgnoreConfigPath(changedPath)) {
+						emit(changedPath);
+						void replaceWatcher(watcher);
+					}
+				};
+				watcher.on("add", emitFile);
+				watcher.on("change", emitFile);
+				watcher.on("unlink", emitFile);
+				watcher.on("addDir", emit);
+				watcher.on("unlinkDir", emit);
+				watcher.on("error", (error) => {
+					console.error("Workspace watcher failed:", error);
+				});
+				return watcher;
+			};
+
+			watchers.set(id, await createWatcher());
 		},
 	);
 

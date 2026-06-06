@@ -54,14 +54,8 @@ function App() {
 		let disposed = false;
 		let unwatch: null | (() => void) = null;
 
-		const isIgnoredPath = (path: string) =>
-			path.includes("/.hubble/") ||
-			path.endsWith("/.hubble") ||
-			path.includes("\\.hubble\\");
-
 		const handleChange = async (paths: string[]) => {
-			const changedPaths = paths.filter((path) => !isIgnoredPath(path));
-			if (changedPaths.length === 0) return;
+			if (paths.length === 0) return;
 			void refreshFiles(workspacePath);
 		};
 
