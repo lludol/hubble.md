@@ -12,6 +12,7 @@ import { createMarkdownFile } from "./fileActions";
 import { SIDEBAR_NAV_SELECTOR } from "./selectors";
 import {
 	forceKeepLocalEdits,
+	getPendingRenameTarget,
 	handleExternalFileChange,
 	loadPath,
 	openWorkspaceWithSidebar,
@@ -88,10 +89,13 @@ function App() {
 
 		const handleChange = async (paths: string[]) => {
 			if (!paths.includes(currentPath)) return;
+			if (getPendingRenameTarget(currentPath)) return;
 			try {
 				const nextContent = await desktopApi.readFileText(currentPath);
+				if (viewerStore.get().currentPath !== currentPath) return;
 				handleExternalFileChange(currentPath, nextContent);
 			} catch {
+				if (viewerStore.get().currentPath !== currentPath) return;
 				await loadPath(currentPath);
 			}
 		};

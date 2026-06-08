@@ -1,6 +1,7 @@
 import { toast } from "sonner";
 import { desktopApi } from "../desktopApi";
 import { classifyFileChange } from "../externalFileChange";
+import { dirname, extname, joinPath, pathInFolder } from "../lib/filePath";
 import { latest } from "../lib/latest";
 import {
 	applyFileAction,
@@ -50,26 +51,20 @@ export function touchFile(path: string) {
 	});
 }
 
-function dirname(filePath: string): string | null {
-	const forwardSlash = filePath.lastIndexOf("/");
-	const backSlash = filePath.lastIndexOf("\\");
-	const separatorIndex = Math.max(forwardSlash, backSlash);
-	if (separatorIndex < 0) return null;
-	if (separatorIndex === 0) return filePath.slice(0, 1);
-	return filePath.slice(0, separatorIndex);
+function uniqueMarkdownPath(parent: string): string {
+	const files = workspaceStore.get().files;
+	const existing = new Set(files.map((file) => file.path.toLocaleLowerCase()));
+	for (let index = 1; ; index++) {
+		const name = index === 1 ? "new-file.md" : `new-file-${index}.md`;
+		const candidate = joinPath(parent, name);
+		if (!existing.has(candidate.toLocaleLowerCase())) return candidate;
+	}
 }
 
-function extname(filePath: string): string {
-	const basename = filePath.split(/[\\/]/).pop() ?? filePath;
-	const dot = basename.lastIndexOf(".");
-	return dot > 0 ? basename.slice(dot) : "";
-}
+const pendingRenames = new Map<string, string>();
 
-function joinPath(parent: string, name: string): string {
-	const separator = parent.includes("\\") && !parent.includes("/") ? "\\" : "/";
-	return parent.endsWith("/") || parent.endsWith("\\")
-		? `${parent}${name}`
-		: `${parent}${separator}${name}`;
+export function getPendingRenameTarget(path: string) {
+	return pendingRenames.get(path) ?? null;
 }
 
 if (workspaceStore.get().workspacePath) {
@@ -216,59 +211,165 @@ export async function savePathContent(
 	}
 }
 
-export async function renameCurrentMarkdownFile(nextName: string) {
+export async function renameMarkdownFile(path: string, nextName: string) {
 	const current = viewerStore.get();
-	if (!current.currentPath) return;
 
 	const trimmedName = nextName.trim();
 	if (trimmedName.length === 0 || /[\\/]/.test(trimmedName)) return;
 
-	const parent = dirname(current.currentPath);
+	const parent = dirname(path);
 	if (!parent) return;
 
-	const currentExt = extname(current.currentPath);
+	const currentExt = extname(path);
 	const nextFileName = /\.[^/.\\]+$/.test(trimmedName)
 		? trimmedName
 		: `${trimmedName}${currentExt}`;
 	const nextPath = joinPath(parent, nextFileName);
-	if (nextPath === current.currentPath) return;
+	if (nextPath === path) return;
 
 	try {
-		await savePathContent(current.currentPath, current.content, {
-			force: true,
-		});
-		await desktopApi.renameFile(current.currentPath, nextPath);
+		if (current.currentPath === path) {
+			await savePathContent(path, current.content, { force: true });
+		}
+		pendingRenames.set(path, nextPath);
+		await desktopApi.renameFile(path, nextPath);
 		appStore.set((state) => ({
 			...state,
 			workspace: {
 				...state.workspace,
 				files: state.workspace.files.map((file) =>
-					file.path === current.currentPath
-						? { ...file, path: nextPath }
-						: file,
+					file.path === path ? { ...file, path: nextPath } : file,
 				),
 				lastOpenedPaths: Object.fromEntries(
 					Object.entries(state.workspace.lastOpenedPaths).map(
 						([workspacePath, openedPath]) => [
 							workspacePath,
-							openedPath === current.currentPath ? nextPath : openedPath,
+							openedPath === path ? nextPath : openedPath,
 						],
 					),
 				),
 			},
 			document: {
 				...state.document,
-				currentPath: nextPath,
+				currentPath:
+					state.document.currentPath === path
+						? nextPath
+						: state.document.currentPath,
 				lastOpenedPath:
-					state.document.lastOpenedPath === current.currentPath
+					state.document.lastOpenedPath === path
 						? nextPath
 						: state.document.lastOpenedPath,
 			},
 		}));
 		await refreshFiles();
 	} catch (err) {
+		pendingRenames.delete(path);
 		const message = err instanceof Error ? err.message : String(err);
 		toast.error("Failed to rename file", { description: message });
+	} finally {
+		window.setTimeout(() => pendingRenames.delete(path), 1000);
+	}
+}
+
+export async function renameCurrentMarkdownFile(nextName: string) {
+	const current = viewerStore.get();
+	if (!current.currentPath) return;
+	await renameMarkdownFile(current.currentPath, nextName);
+}
+
+export async function createMarkdownFileInFolder(parentPath: string) {
+	const path = uniqueMarkdownPath(parentPath);
+	try {
+		await desktopApi.writeFileText(path, "");
+		const modified_at = Math.floor(Date.now() / 1000);
+		workspaceStore.set((state) => ({
+			...state,
+			files: [...state.files, { path, modified_at }],
+		}));
+		await loadPath(path);
+		await refreshFiles();
+		return path;
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		toast.error("Failed to create file", { description: message });
+		return null;
+	}
+}
+
+export async function deleteMarkdownFile(path: string) {
+	try {
+		await desktopApi.deleteFile(path);
+		appStore.set((state) => ({
+			...state,
+			workspace: {
+				...state.workspace,
+				files: state.workspace.files.filter((file) => file.path !== path),
+				lastOpenedPaths: Object.fromEntries(
+					Object.entries(state.workspace.lastOpenedPaths).filter(
+						([, openedPath]) => openedPath !== path,
+					),
+				),
+			},
+			document:
+				state.document.currentPath === path
+					? emptyDoc(
+							state.document.lastOpenedPath === path
+								? null
+								: state.document.lastOpenedPath,
+						)
+					: {
+							...state.document,
+							lastOpenedPath:
+								state.document.lastOpenedPath === path
+									? null
+									: state.document.lastOpenedPath,
+						},
+		}));
+		await refreshFiles();
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		toast.error("Failed to delete file", { description: message });
+	}
+}
+
+export async function deleteFolder(path: string) {
+	try {
+		await desktopApi.deleteFile(path, { recursive: true });
+		appStore.set((state) => ({
+			...state,
+			workspace: {
+				...state.workspace,
+				files: state.workspace.files.filter(
+					(file) => !pathInFolder(file.path, path),
+				),
+				lastOpenedPaths: Object.fromEntries(
+					Object.entries(state.workspace.lastOpenedPaths).filter(
+						([, openedPath]) => !pathInFolder(openedPath, path),
+					),
+				),
+			},
+			document:
+				state.document.currentPath &&
+				pathInFolder(state.document.currentPath, path)
+					? emptyDoc(
+							state.document.lastOpenedPath &&
+								pathInFolder(state.document.lastOpenedPath, path)
+								? null
+								: state.document.lastOpenedPath,
+						)
+					: {
+							...state.document,
+							lastOpenedPath:
+								state.document.lastOpenedPath &&
+								pathInFolder(state.document.lastOpenedPath, path)
+									? null
+									: state.document.lastOpenedPath,
+						},
+		}));
+		await refreshFiles();
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		toast.error("Failed to delete folder", { description: message });
 	}
 }
 

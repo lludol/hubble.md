@@ -8,6 +8,7 @@ import {
 } from "react";
 import MingcuteAddLine from "~icons/mingcute/add-line";
 import MingcuteLayoutLeftLine from "~icons/mingcute/layout-left-line";
+import { fileNameFromPath } from "../lib/filePath";
 import { Button } from "../primitives/button";
 
 const TOOLBAR_INSET = isMac() ? 70 : 8;
@@ -15,10 +16,6 @@ const ACTIONS_BASIS = "114px";
 const NO_DRAG_STYLE = {
 	WebkitAppRegion: "no-drag",
 } as CSSProperties;
-
-function basename(path: string) {
-	return path.split(/[\\/]/).pop() ?? path;
-}
 
 function ToolbarActions({ children }: { children?: React.ReactNode }) {
 	return (
@@ -57,7 +54,7 @@ export function Toolbar({
 	const [editingTitle, setEditingTitle] = useState(false);
 	const [draftTitle, setDraftTitle] = useState("");
 	const titleInputRef = useRef<HTMLInputElement | null>(null);
-	const title = currentPath ? basename(currentPath) : "";
+	const title = currentPath ? fileNameFromPath(currentPath) : "";
 
 	useEffect(() => {
 		if (!scrollContainer) {
@@ -127,7 +124,7 @@ export function Toolbar({
 				{editingTitle ? (
 					<input
 						ref={titleInputRef}
-						className="h-6 min-w-0 max-w-full rounded-sm bg-transparent px-1 text-center text-xs text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring"
+						className="h-6 min-w-0 max-w-full rounded-sm bg-transparent px-1 text-center text-xs text-foreground outline-none focus-visible:outline-none focus-visible:ring-0"
 						style={NO_DRAG_STYLE}
 						value={draftTitle}
 						onBlur={() => void commitTitleEdit()}
@@ -145,7 +142,7 @@ export function Toolbar({
 				) : (
 					<button
 						type="button"
-						className="min-w-0 truncate rounded-sm px-1 text-center text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+						className="min-w-0 truncate rounded-sm px-1 text-center text-xs text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-0"
 						style={NO_DRAG_STYLE}
 						onClick={beginTitleEdit}
 						disabled={!title || !onRenameCurrentPath}

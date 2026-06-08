@@ -625,9 +625,14 @@ function registerIpc() {
 		},
 	);
 
-	ipcMain.handle("desktop:delete-file", async (_event, { path: filePath }) => {
-		await fs.rm(assertGranted(filePath));
-	});
+	ipcMain.handle(
+		"desktop:delete-file",
+		async (_event, { path: filePath, options }) => {
+			await fs.rm(assertGranted(filePath), {
+				recursive: options?.recursive === true,
+			});
+		},
+	);
 
 	ipcMain.handle(
 		"desktop:read-binary-file",

@@ -21,7 +21,8 @@ const desktopApi = {
 		ipcRenderer.invoke("desktop:rename-file", { fromPath, toPath }),
 	persistPastedImage: (input) =>
 		ipcRenderer.invoke("desktop:persist-pasted-image", input),
-	deleteFile: (path) => ipcRenderer.invoke("desktop:delete-file", { path }),
+	deleteFile: (path, options) =>
+		ipcRenderer.invoke("desktop:delete-file", { path, options }),
 	readBinaryFile: (path) =>
 		ipcRenderer.invoke("desktop:read-binary-file", { path }),
 	writeBinaryFile: (path, bytes) =>

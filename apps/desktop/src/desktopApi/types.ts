@@ -32,7 +32,7 @@ export type DesktopApi = {
 	persistPastedImage(
 		input: PersistPastedImageInput,
 	): Promise<PersistPastedImageOutput>;
-	deleteFile(path: string): Promise<void>;
+	deleteFile(path: string, options?: { recursive?: boolean }): Promise<void>;
 	readBinaryFile(path: string): Promise<number[]>;
 	writeBinaryFile(path: string, bytes: number[]): Promise<void>;
 	openFilePicker(options: { defaultPath?: string }): Promise<string | null>;

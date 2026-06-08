@@ -17,6 +17,7 @@ function isEditableElement(el: Element | null): boolean {
 export function useSidebarKeyboardNav<T>({
 	items,
 	onSelect,
+	onEnter,
 	onExpand,
 	onCollapse,
 	navRef,
@@ -24,6 +25,7 @@ export function useSidebarKeyboardNav<T>({
 }: {
 	items: T[];
 	onSelect: (item: T) => void;
+	onEnter?: (item: T) => void;
 	onExpand?: (item: T) => void;
 	onCollapse?: (item: T) => void;
 	navRef: RefObject<HTMLElement | null>;
@@ -32,6 +34,10 @@ export function useSidebarKeyboardNav<T>({
 	const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
 	const focusedIndexRef = useRef(focusedIndex);
 	focusedIndexRef.current = focusedIndex;
+	const getActionIndex = useCallback(
+		() => focusedIndexRef.current ?? (activeIndex >= 0 ? activeIndex : null),
+		[activeIndex],
+	);
 
 	useEffect(() => {
 		if (focusedIndex === null) return;
@@ -44,16 +50,16 @@ export function useSidebarKeyboardNav<T>({
 	useEffect(() => {
 		const onGlobalEnter = (event: KeyboardEvent) => {
 			if (event.key !== "Enter") return;
-			const idx = focusedIndexRef.current;
+			const idx = getActionIndex();
 			if (idx === null) return;
 			if (navRef.current?.contains(document.activeElement)) return;
 			if (isEditableElement(document.activeElement)) return;
 			event.preventDefault();
-			if (items[idx]) onSelect(items[idx]);
+			if (items[idx]) (onEnter ?? onSelect)(items[idx]);
 		};
 		window.addEventListener("keydown", onGlobalEnter);
 		return () => window.removeEventListener("keydown", onGlobalEnter);
-	}, [items, onSelect, navRef]);
+	}, [getActionIndex, items, onEnter, onSelect, navRef]);
 
 	const onKeyDown = useCallback(
 		(event: React.KeyboardEvent) => {
@@ -70,9 +76,16 @@ export function useSidebarKeyboardNav<T>({
 					});
 					break;
 				}
-				case "Enter":
+				case "Enter": {
+					const idx = getActionIndex();
+					if (idx !== null && items[idx]) {
+						event.preventDefault();
+						(onEnter ?? onSelect)(items[idx]);
+					}
+					break;
+				}
 				case " ": {
-					const idx = focusedIndexRef.current;
+					const idx = getActionIndex();
 					if (idx !== null && items[idx]) {
 						event.preventDefault();
 						onSelect(items[idx]);
@@ -80,7 +93,7 @@ export function useSidebarKeyboardNav<T>({
 					break;
 				}
 				case "ArrowRight": {
-					const idx = focusedIndexRef.current;
+					const idx = getActionIndex();
 					if (idx !== null && items[idx] && onExpand) {
 						event.preventDefault();
 						onExpand(items[idx]);
@@ -88,7 +101,7 @@ export function useSidebarKeyboardNav<T>({
 					break;
 				}
 				case "ArrowLeft": {
-					const idx = focusedIndexRef.current;
+					const idx = getActionIndex();
 					if (idx !== null && items[idx] && onCollapse) {
 						event.preventDefault();
 						onCollapse(items[idx]);
@@ -103,7 +116,15 @@ export function useSidebarKeyboardNav<T>({
 				}
 			}
 		},
-		[items, onSelect, onExpand, onCollapse, activeIndex],
+		[
+			items,
+			onEnter,
+			onSelect,
+			onExpand,
+			onCollapse,
+			activeIndex,
+			getActionIndex,
+		],
 	);
 
 	return { focusedIndex, setFocusedIndex, onKeyDown };

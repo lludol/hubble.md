@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod/v4";
+import { fileNameFromPath, normalizeDisplayPath } from "../lib/filePath";
 
 export type SidebarSortMode = "alpha" | "recent";
 export type SidebarFile = {
@@ -284,16 +285,6 @@ function compareFiles(
 		if (byModified !== 0) return byModified;
 	}
 	return fileNameFromPath(a.path).localeCompare(fileNameFromPath(b.path));
-}
-
-function normalizeDisplayPath(path: string) {
-	return path.replace(/\\/g, "/").replace(/^\/+/, "");
-}
-
-function fileNameFromPath(path: string) {
-	const normalized = normalizeDisplayPath(path);
-	const segments = normalized.split("/").filter(Boolean);
-	return segments[segments.length - 1] ?? normalized;
 }
 
 function getFolderAncestorIds(displayPath: string): Set<string> {
