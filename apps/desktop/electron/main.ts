@@ -20,6 +20,13 @@ type FileEntry = {
 	modified_at: number;
 };
 
+type EmbedFileEntry = {
+	name: string;
+	path: string;
+	modified_at: number;
+	size: number;
+};
+
 type MenuState = {
 	hasWorkspace: boolean;
 };
@@ -511,6 +518,61 @@ async function collectMarkdownFiles(
 	}
 }
 
+async function collectWorkspaceFiles(
+	root: string,
+	dir: string,
+	glob: string,
+	out: EmbedFileEntry[],
+	inheritedRules: IgnoreRule[] = [],
+) {
+	const rules = await rulesForDir(dir, inheritedRules);
+	const entries = await fs.readdir(dir, { withFileTypes: true });
+	for (const entry of entries) {
+		const entryPath = path.join(dir, entry.name);
+		if (isIgnoredByRules(entryPath, rules)) continue;
+		const relativePath = path
+			.relative(root, entryPath)
+			.split(path.sep)
+			.join("/");
+		if (relativePath === ".hubble" || relativePath.startsWith(".hubble/"))
+			continue;
+		if (entry.isDirectory()) {
+			await collectWorkspaceFiles(root, entryPath, glob, out, rules);
+			continue;
+		}
+		if (!matchesGlob(relativePath, glob)) continue;
+		const stat = await fs.stat(entryPath);
+		out.push({
+			name: entry.name,
+			path: relativePath,
+			modified_at: Math.floor(stat.mtimeMs / 1000),
+			size: stat.size,
+		});
+	}
+}
+
+function matchesGlob(relativePath: string, glob: string): boolean {
+	if (glob === "" || glob === "**" || glob === "**/*") return true;
+	let source = "";
+	for (let index = 0; index < glob.length; index += 1) {
+		const char = glob[index];
+		const next = glob[index + 1];
+		const afterNext = glob[index + 2];
+		if (char === "*" && next === "*" && afterNext === "/") {
+			source += "(?:.*/)?";
+			index += 2;
+		} else if (char === "*" && next === "*") {
+			source += ".*";
+			index += 1;
+		} else if (char === "*") {
+			source += "[^/]*";
+		} else {
+			source += char.replace(/[|\\{}()[\]^$+?.]/g, "\\$&");
+		}
+	}
+	return new RegExp(`^${source}$`).test(relativePath);
+}
+
 async function createWindow() {
 	mainWindow = new BrowserWindow({
 		title: "Hubble",
@@ -543,6 +605,19 @@ function registerIpc() {
 			const entries: FileEntry[] = [];
 			await collectMarkdownFiles(root, entries);
 			return entries;
+		},
+	);
+
+	ipcMain.handle(
+		"desktop:embed-list-files",
+		async (_event, { workspacePath, glob }) => {
+			const root = assertGrantedRoot(workspacePath);
+			const stat = await fs.stat(root);
+			if (!stat.isDirectory())
+				throw new Error(`Not a directory: ${workspacePath}`);
+			const files: EmbedFileEntry[] = [];
+			await collectWorkspaceFiles(root, root, String(glob ?? "**/*"), files);
+			return files.sort((a, b) => a.path.localeCompare(b.path));
 		},
 	);
 

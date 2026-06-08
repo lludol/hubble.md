@@ -3,6 +3,13 @@ export type FileEntry = {
 	modified_at: number;
 };
 
+export type EmbedFileEntry = {
+	name: string;
+	path: string;
+	modified_at: number;
+	size: number;
+};
+
 export type PersistPastedImageInput = {
 	filePath: string;
 	bytes: number[];
@@ -26,6 +33,10 @@ export type MenuState = {
 
 export type DesktopApi = {
 	listDirectory(path: string): Promise<FileEntry[]>;
+	listEmbedFiles(
+		workspacePath: string,
+		glob: string,
+	): Promise<EmbedFileEntry[]>;
 	readFileText(path: string): Promise<string>;
 	writeFileText(path: string, content: string): Promise<void>;
 	renameFile(fromPath: string, toPath: string): Promise<void>;

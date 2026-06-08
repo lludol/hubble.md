@@ -14,15 +14,22 @@ type EmbedAttrs = {
 };
 
 type EmbedBundle = {
-	metadata?: {
-		name?: string;
-		builderVersion?: string;
-		contractVersion?: number;
-	};
 	mount: (
 		shadowRoot: ShadowRoot,
 		props: Record<string, string>,
+		hubble: HubbleEmbedApi,
 	) => undefined | (() => void);
+};
+
+type HubbleEmbedApi = {
+	listFiles(glob: string): Promise<
+		{
+			name: string;
+			path: string;
+			modified_at: number;
+			size: number;
+		}[]
+	>;
 };
 
 declare global {
@@ -114,7 +121,11 @@ class HubbleEmbedElement extends HTMLElement {
 		try {
 			const bundle = await loadEmbedBundle(workspacePath, name);
 			if (version !== this.#renderVersion) return;
-			const cleanup = bundle.mount(shadowRoot, props);
+			const cleanup = bundle.mount(
+				shadowRoot,
+				props,
+				createHubbleApi(workspacePath),
+			);
 			this.#cleanup = typeof cleanup === "function" ? cleanup : null;
 		} catch (error) {
 			if (version !== this.#renderVersion) return;
@@ -136,6 +147,7 @@ function EmbedNodeView({
 }: ReactNodeViewProps & { workspacePath: string | null }) {
 	const hostRef = useRef<HTMLDivElement | null>(null);
 	const attrs = node.attrs as EmbedAttrs;
+	const propsJson = JSON.stringify(attrs.props ?? {});
 
 	useEffect(() => {
 		const host = hostRef.current;
@@ -144,9 +156,9 @@ function EmbedNodeView({
 		const element = document.createElement(EMBED_ELEMENT);
 		element.setAttribute("embed-name", attrs.name);
 		if (workspacePath) element.setAttribute("workspace-path", workspacePath);
-		element.setAttribute("props-json", JSON.stringify(attrs.props ?? {}));
+		element.setAttribute("props-json", propsJson);
 		host.replaceChildren(element);
-	}, [attrs.name, attrs.props, workspacePath]);
+	}, [attrs.name, propsJson, workspacePath]);
 
 	return (
 		<NodeViewWrapper className="hubble-embed">
@@ -202,6 +214,12 @@ function renderError(shadowRoot: ShadowRoot, message: string) {
 	error.className = "hubble-embed-error";
 	error.textContent = message;
 	shadowRoot.append(error);
+}
+
+function createHubbleApi(workspacePath: string): HubbleEmbedApi {
+	return {
+		listFiles: (glob) => window.desktopApi.listEmbedFiles(workspacePath, glob),
+	};
 }
 
 function parseProps(raw: string | null): Record<string, string> {

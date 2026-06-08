@@ -136,7 +136,7 @@ const metadata = {
 window.__hubbleEmbeds = window.__hubbleEmbeds || {};
 window.__hubbleEmbeds[${embedName}] = {
 	metadata,
-	mount(shadowRoot, props) {
+	mount(shadowRoot, props, hubble) {
 		if (css) {
 			const style = document.createElement("style");
 			style.textContent = css;
@@ -145,7 +145,7 @@ window.__hubbleEmbeds[${embedName}] = {
 		const mountPoint = document.createElement("div");
 		shadowRoot.append(mountPoint);
 		const root = createRoot(mountPoint);
-		root.render(React.createElement(App, props));
+		root.render(React.createElement(App, { ...props, hubble }));
 		return () => root.unmount();
 	},
 };
