@@ -15,6 +15,8 @@ Use Git tags as the release trigger. Prefer explicit tags over detecting version
 4. Push the branch and tag.
 5. GitHub Actions builds, signs, notarizes, packages, creates the GitHub Release, and uploads Electron artifacts.
 
+If using electron-builder GitHub publish, set `publish.releaseType = "release"` or expect a draft release that must be manually published.
+
 Expected release artifacts:
 
 - `latest-mac.yml`
