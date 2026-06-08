@@ -198,7 +198,7 @@ function PropertyRow({
 		onNameAutoFocused();
 	}, [autoFocusName, onNameAutoFocused]);
 	return (
-		<div className="grid grid-cols-[minmax(7rem,0.75fr)_2fr] items-start gap-2">
+		<div className="group/property grid grid-cols-[minmax(7rem,0.75fr)_2fr_auto] items-start gap-2">
 			<div className="flex min-w-0 items-center gap-1">
 				<PropertyTypeSelect
 					value={type}
@@ -253,6 +253,15 @@ function PropertyRow({
 					}}
 				/>
 			</div>
+			<button
+				type="button"
+				aria-label={`Delete ${property.key || "property"}`}
+				title="Delete property"
+				className="inline-flex size-7 items-center justify-center rounded-sm bg-accent/0 text-muted-foreground/45 opacity-0 outline-none transition-[background-color,color,opacity] duration-150 ease-out hover:bg-accent hover:text-foreground focus-visible:bg-accent focus-visible:text-foreground focus-visible:opacity-100 group-focus-within/property:opacity-100 group-hover/property:opacity-100"
+				onClick={() => onDelete()}
+			>
+				<MingcuteCloseLine className="size-3.5" />
+			</button>
 		</div>
 	);
 }
