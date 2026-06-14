@@ -171,6 +171,17 @@ export function EditorView({
 	editorRef.current = editor;
 
 	useEffect(() => {
+		if (!editor || !editorViewportEl) return;
+		const focusEditorEnd = (event: MouseEvent) => {
+			if (event.target !== editorViewportEl) return;
+			editor.commands.focus("end");
+		};
+		editorViewportEl.addEventListener("mousedown", focusEditorEnd);
+		return () =>
+			editorViewportEl.removeEventListener("mousedown", focusEditorEnd);
+	}, [editor, editorViewportEl]);
+
+	useEffect(() => {
 		if (!editor) return;
 		if (initialMarkdown === latestMarkdownRef.current) {
 			return;
@@ -208,7 +219,7 @@ export function EditorView({
 			data-hubble-editor
 		>
 			<div
-				className="relative min-h-0 flex-1 overflow-auto overscroll-contain"
+				className="editorViewport relative min-h-0 flex-1 overflow-auto overscroll-contain"
 				ref={setEditorViewport}
 			>
 				<FilePropertiesPanel
@@ -226,7 +237,7 @@ export function EditorView({
 						scheduleSave();
 					}}
 				/>
-				<EditorContent editor={editor} className="h-full" />
+				<EditorContent editor={editor} />
 				<VirtualCursor
 					editor={editor}
 					containerRef={editorRootRef}

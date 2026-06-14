@@ -10,6 +10,7 @@
 			"types": "./dist/index.d.ts",
 			"default": "./dist/index.js"
 		},
+		"./style.css": "./dist/index.css",
 		"./tailwind.css": "./dist/tailwind.css",
 		"./theme.css": "./dist/theme.css"
 	},
@@ -17,9 +18,9 @@
 		"dist"
 	],
 	"scripts": {
-		"build": "tsc -p tsconfig.json && cp src/*.css dist/ && cp src/editor/*.css dist/editor/",
+		"build": "vite build && tsc -p tsconfig.json --emitDeclarationOnly",
 		"typecheck": "tsc -p tsconfig.json --noEmit",
-		"dev": "tsc -p tsconfig.json --watch --preserveWatchOutput"
+		"dev": "vite build --watch"
 	},
 	"dependencies": {
 		"@base-ui/react": "^1.3.0",
@@ -44,6 +45,7 @@
 		"@iconify-json/mingcute": "^1.2.7",
 		"@types/react": "^19.1.8",
 		"typescript": "~5.8.3",
-		"unplugin-icons": "^23.0.1"
+		"unplugin-icons": "^23.0.1",
+		"vite": "^7.0.4"
 	}
 }

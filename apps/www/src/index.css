@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "open-props/easings";
 @import "@hubble.md/ui/tailwind.css";
+@import "@hubble.md/ui/style.css";
 @import "@hubble.md/ui/theme.css";
 
 html,

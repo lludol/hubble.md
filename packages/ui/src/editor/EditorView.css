@@ -1,25 +1,14 @@
-.root {
-	position: relative;
-	display: flex;
-	block-size: 100%;
-	min-block-size: 0;
-	flex-direction: column;
-}
-
-.viewport {
-	position: relative;
-	min-block-size: 0;
-	flex: 1 1 auto;
-	overflow: auto;
-	overscroll-behavior: contain;
-}
-
-.editorContent {
-	block-size: 100%;
+[data-hubble-editor] .editorViewport {
+	box-sizing: border-box;
+	padding-block-end: clamp(4rem, 16vh, 8rem);
 }
 
 [data-hubble-editor] .ProseMirror {
-	min-block-size: 100%;
+	--editor-block-gap: 0.45em;
+	--editor-paragraph-gap: 0.5em;
+	--editor-section-gap: 0.9em;
+	--editor-list-gap: 0.25em;
+
 	outline: none;
 	white-space: break-spaces;
 	overflow-wrap: break-word;
@@ -29,8 +18,30 @@
 	color: var(--foreground);
 }
 
+[data-hubble-editor]
+	.ProseMirror
+	:is(h1, h2, h3, h4, h5, h6, p, ul, ol, blockquote, pre, table) {
+	margin-block: 0;
+}
+
 [data-hubble-editor] .ProseMirror > * {
 	margin-inline-start: 1rem;
+}
+
+[data-hubble-editor] .ProseMirror > * + * {
+	margin-block-start: var(--editor-block-gap);
+}
+
+[data-hubble-editor] .ProseMirror > p + :is(p, ul, ol) {
+	margin-block-start: var(--editor-paragraph-gap);
+}
+
+[data-hubble-editor] .ProseMirror > * + :is(h1, h2) {
+	margin-block-start: var(--editor-section-gap);
+}
+
+[data-hubble-editor] .ProseMirror > :is(h1, h2, h3) + * {
+	margin-block-start: 0.35em;
 }
 
 [data-hubble-editor] .ProseMirror > :first-child {
@@ -40,16 +51,19 @@
 [data-hubble-editor] .ProseMirror h1 {
 	font-size: 1.5rem;
 	font-weight: 600;
+	line-height: 1.25;
 }
 
 [data-hubble-editor] .ProseMirror h2 {
 	font-size: 1.2rem;
 	font-weight: 600;
+	line-height: 1.3;
 }
 
 [data-hubble-editor] .ProseMirror h3 {
 	font-size: 1rem;
 	font-weight: 600;
+	line-height: 1.3;
 }
 
 [data-hubble-editor] .ProseMirror ul {
@@ -62,6 +76,11 @@
 
 [data-hubble-editor] .ProseMirror :is(ul, ol) li {
 	margin-inline-start: 1.3rem;
+}
+
+[data-hubble-editor] .ProseMirror li + li,
+[data-hubble-editor] .ProseMirror li > :is(ul, ol) {
+	margin-block-start: var(--editor-list-gap);
 }
 
 [data-hubble-editor] .ProseMirror ul > li[data-checked] {
