@@ -173,11 +173,6 @@ export function Sidebar({
 	});
 
 	useEffect(() => {
-		if (highlightPath || rows.length === 0 || focusedIndex !== null) return;
-		setFocusedIndex(0);
-	}, [focusedIndex, highlightPath, rows.length, setFocusedIndex]);
-
-	useEffect(() => {
 		if (!renamingPath) return;
 		renameInputRef.current?.focus();
 		renameInputRef.current?.select();
