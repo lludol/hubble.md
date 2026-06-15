@@ -1,7 +1,7 @@
 import { Button, EditorView, type WikiTarget } from "@hubble.md/ui";
 import { useStoreValue } from "@simplestack/store/react";
 import { keymatch } from "keymatch";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { Sidebar } from "./components/Sidebar";
@@ -63,6 +63,7 @@ function App() {
 		null,
 	);
 	const [dismissedVersion, setDismissedVersion] = useState<string | null>(null);
+	const syncWorkspaceTimerRef = useRef<number | null>(null);
 	const readyVersion =
 		updateState?.status === "ready"
 			? (updateState.availableVersion ?? "__unknown__")
@@ -91,37 +92,6 @@ function App() {
 		}
 		await desktopApi.checkForUpdates();
 	}, [installUpdate, updateState]);
-
-	useEffect(() => {
-		if (!workspacePath) return;
-
-		let disposed = false;
-		let unwatch: null | (() => void) = null;
-
-		const handleChange = async (paths: string[]) => {
-			if (paths.length === 0) return;
-			void refreshFiles(workspacePath);
-		};
-
-		const setup = async () => {
-			unwatch = await desktopApi.watchPath(
-				workspacePath,
-				{ recursive: true },
-				(paths) => void handleChange(paths),
-			);
-			if (disposed && unwatch) {
-				unwatch();
-			}
-		};
-
-		void setup();
-		return () => {
-			disposed = true;
-			if (unwatch) {
-				unwatch();
-			}
-		};
-	}, [workspacePath]);
 
 	useEffect(() => {
 		const currentPath = state.currentPath;
@@ -172,6 +142,27 @@ function App() {
 		if (typeof selected === "string") {
 			await loadPath(selected);
 		}
+	}, []);
+
+	const syncWorkspace = useCallback((delayMs = 0) => {
+		if (syncWorkspaceTimerRef.current !== null) {
+			window.clearTimeout(syncWorkspaceTimerRef.current);
+		}
+		syncWorkspaceTimerRef.current = window.setTimeout(() => {
+			syncWorkspaceTimerRef.current = null;
+			// The sidebar is snapshot-based; focus/menu sync replaces the old
+			// recursive workspace watcher that could exhaust file handles.
+			if (!workspaceStore.get().workspacePath) return;
+			void refreshFiles();
+		}, delayMs);
+	}, []);
+
+	useEffect(() => {
+		return () => {
+			if (syncWorkspaceTimerRef.current !== null) {
+				window.clearTimeout(syncWorkspaceTimerRef.current);
+			}
+		};
 	}, []);
 
 	useEffect(() => {
@@ -244,11 +235,21 @@ function App() {
 			desktopApi.onMenuShowWorkspaceSwitcher(() =>
 				setWorkspaceSwitcherOpen(true),
 			),
+			desktopApi.onMenuSyncWorkspace(() => syncWorkspace()),
 		];
 		return () => {
 			for (const dispose of disposers) dispose();
 		};
-	}, [openFilePicker, openSettings]);
+	}, [openFilePicker, openSettings, syncWorkspace]);
+
+	useEffect(() => {
+		// Window focus can fire in bursts when switching apps, so debounce the
+		// sidebar refresh and keep the editor interactive while it runs.
+		const dispose = desktopApi.onWindowFocus(() => syncWorkspace(300));
+		return () => {
+			dispose();
+		};
+	}, [syncWorkspace]);
 
 	useEffect(() => {
 		let active = true;

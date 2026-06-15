@@ -83,6 +83,9 @@ const desktopApi = {
 		subscribe("desktop:menu-open-settings", callback),
 	onMenuShowWorkspaceSwitcher: (callback) =>
 		subscribe("desktop:menu-show-workspace-switcher", callback),
+	onMenuSyncWorkspace: (callback) =>
+		subscribe("desktop:menu-sync-workspace", callback),
+	onWindowFocus: (callback) => subscribe("desktop:window-focus", callback),
 } satisfies DesktopApi;
 
 contextBridge.exposeInMainWorld("desktopApi", desktopApi);

@@ -265,12 +265,6 @@ function isMarkdownPath(candidatePath: string): boolean {
 	return /\.(md|markdown|mdown)$/i.test(candidatePath);
 }
 
-/** Covers Git ignore config files: .gitignore and .ignore. */
-function isIgnoreConfigPath(candidatePath: string): boolean {
-	const name = path.basename(candidatePath);
-	return ignoreConfigFiles.includes(name);
-}
-
 function isMissingPathError(error: unknown): boolean {
 	return (
 		typeof error === "object" &&
@@ -295,24 +289,6 @@ async function rulesForDir(dir: string, inherited: IgnoreRule[]) {
 	}
 
 	return hasRules ? [...inherited, { dir, matcher }] : inherited;
-}
-
-async function collectWorkspaceIgnoreRules(
-	dir: string,
-	inherited: IgnoreRule[] = [],
-): Promise<IgnoreRule[]> {
-	const rules = await rulesForDir(dir, inherited);
-	const collected =
-		rules.length > inherited.length ? [rules[rules.length - 1]] : [];
-
-	const entries = await fs.readdir(dir, { withFileTypes: true });
-	for (const entry of entries) {
-		if (!entry.isDirectory()) continue;
-		const entryPath = path.join(dir, entry.name);
-		if (isIgnoredByRules(entryPath, rules)) continue;
-		collected.push(...(await collectWorkspaceIgnoreRules(entryPath, rules)));
-	}
-	return collected;
 }
 
 function assertGranted(input: string): string {
@@ -463,6 +439,13 @@ function buildMenu() {
 					accelerator: "CmdOrCtrl+Shift+O",
 					enabled: menuState.hasWorkspace,
 					click: () => sendToRenderer("desktop:menu-show-workspace-switcher"),
+				},
+				{ type: "separator" },
+				{
+					id: "sync-workspace",
+					label: "Sync Workspace",
+					enabled: menuState.hasWorkspace,
+					click: () => sendToRenderer("desktop:menu-sync-workspace"),
 				},
 				{ type: "separator" },
 				{ role: "close" },
@@ -762,6 +745,8 @@ async function createWindow() {
 		},
 	});
 
+	mainWindow.on("focus", () => sendToRenderer("desktop:window-focus"));
+
 	if (isDev && process.env.ELECTRON_RENDERER_URL) {
 		await mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
 	} else {
@@ -981,7 +966,7 @@ function registerIpc() {
 
 	ipcMain.handle(
 		"desktop:watch-path",
-		async (_event, { watchId, path: watchPath, options }) => {
+		async (_event, { watchId, path: watchPath }) => {
 			const id = String(watchId);
 			const resolved = assertGranted(watchPath);
 			const emit = (changedPath: string) => {
@@ -990,35 +975,16 @@ function registerIpc() {
 				]);
 			};
 
-			const replaceWatcher = async (currentWatcher: FSWatcher) => {
-				await currentWatcher.close();
-				if (watchers.get(id) !== currentWatcher) return;
-				const next = await createWatcher();
-				if (watchers.get(id) === currentWatcher) {
-					watchers.set(id, next);
-				} else {
-					await next.close();
-				}
-			};
-
 			const createWatcher = async () => {
-				const ignoreRules = options?.recursive
-					? await collectWorkspaceIgnoreRules(resolved)
-					: [];
 				const watcher = chokidar.watch(resolved, {
 					ignoreInitial: true,
-					depth: options?.recursive ? undefined : 0,
-					ignored: options?.recursive
-						? (path) => isIgnoredByRules(path, ignoreRules)
-						: undefined,
+					// Only the active file uses this watcher. The sidebar refreshes from
+					// snapshots so large workspaces do not create one watcher per folder.
+					depth: 0,
 				});
-				/** Changes to .ignore or .gitignore files can change which markdown files should be indexed. Replace the watcher in this case. */
 				const emitFile = (changedPath: string) => {
 					if (isMarkdownPath(changedPath)) {
 						emit(changedPath);
-					} else if (isIgnoreConfigPath(changedPath)) {
-						emit(changedPath);
-						void replaceWatcher(watcher);
 					}
 				};
 				watcher.on("add", emitFile);
@@ -1027,7 +993,7 @@ function registerIpc() {
 				watcher.on("addDir", emit);
 				watcher.on("unlinkDir", emit);
 				watcher.on("error", (error) => {
-					console.error("Workspace watcher failed:", error);
+					console.error("File watcher failed:", error);
 				});
 				return watcher;
 			};
