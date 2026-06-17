@@ -14,6 +14,7 @@ function subscribe<T extends unknown[]>(
 let nextWatchId = 0;
 
 const desktopApi = {
+	platform: process.platform,
 	listDirectory: (path) =>
 		ipcRenderer.invoke("desktop:list-directory", { path }),
 	listEmbedFiles: (workspacePath, glob) =>
@@ -51,6 +52,7 @@ const desktopApi = {
 	},
 	openExternalUrl: (url) =>
 		ipcRenderer.invoke("desktop:open-external-url", { url }),
+	revealFile: (path) => ipcRenderer.invoke("desktop:reveal-file", { path }),
 	resolvePath: (path) => ipcRenderer.invoke("desktop:resolve-path", { path }),
 	toAssetUrl: (path) =>
 		`hubble-asset://local/?path=${encodeURIComponent(path)}`,

@@ -971,6 +971,10 @@ function registerIpc() {
 		await shell.openExternal(url);
 	});
 
+	ipcMain.handle("desktop:reveal-file", (_event, { path: filePath }) => {
+		shell.showItemInFolder(assertGranted(filePath));
+	});
+
 	ipcMain.handle("desktop:resolve-path", (_event, { path }) =>
 		resolvePath(path),
 	);

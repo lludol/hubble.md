@@ -49,7 +49,10 @@ export type DesktopUpdateState = {
 	lastCheckedAt: number | null;
 };
 
+export type DesktopPlatform = NodeJS.Platform;
+
 export type DesktopApi = {
+	platform: DesktopPlatform;
 	listDirectory(path: string): Promise<FileEntry[]>;
 	listEmbedFiles(
 		workspacePath: string,
@@ -75,6 +78,7 @@ export type DesktopApi = {
 		callback: (paths: string[]) => void,
 	): Promise<Unsubscribe>;
 	openExternalUrl(url: string): Promise<void>;
+	revealFile(path: string): Promise<void>;
 	resolvePath(path: string): Promise<string>;
 	toAssetUrl(path: string): string;
 	getLaunchFilePath(): Promise<string | null>;

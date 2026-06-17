@@ -14,6 +14,7 @@ import MingcuteAzSortAscendingLettersLine from "~icons/mingcute/az-sort-ascendin
 import MingcuteCheckLine from "~icons/mingcute/check-line";
 import MingcuteDeleteLine from "~icons/mingcute/delete-line";
 import MingcuteEditLine from "~icons/mingcute/edit-line";
+import MingcuteFolderOpenLine from "~icons/mingcute/folder-open-line";
 import MingcuteMore2Line from "~icons/mingcute/more-2-line";
 import MingcuteRightLine from "~icons/mingcute/right-line";
 import MingcuteSortDescendingLine from "~icons/mingcute/sort-descending-line";
@@ -61,6 +62,9 @@ export function Sidebar({
 	onCollapse,
 	onSortModeChange,
 	onSelectFile,
+	onRevealFile,
+	onRevealFolder,
+	revealLabel,
 	onRenameFile,
 	onDeleteFile,
 	onCreateFile,
@@ -79,6 +83,9 @@ export function Sidebar({
 	onCollapse?: () => void;
 	onSortModeChange: (mode: SidebarSortMode) => void;
 	onSelectFile: (path: string) => void;
+	onRevealFile?: (path: string) => void;
+	onRevealFolder?: (folderId: string) => void;
+	revealLabel?: string;
 	onRenameFile?: (path: string, nextName: string) => void;
 	onDeleteFile?: (path: string) => void;
 	onCreateFile?: (folderId: string | null) => Promise<string | null>;
@@ -354,9 +361,19 @@ export function Sidebar({
 							onPointerEnter={() => setFocusedIndex(index)}
 							onPointerLeave={() => setFocusedIndex(null)}
 							onContextMenu={(event) => {
-								if (row.kind === "file" && !onRenameFile && !onDeleteFile)
+								if (
+									row.kind === "file" &&
+									!onRevealFile &&
+									!onRenameFile &&
+									!onDeleteFile
+								)
 									return;
-								if (row.kind === "folder" && !onCreateFile && !onDeleteFolder)
+								if (
+									row.kind === "folder" &&
+									!onRevealFolder &&
+									!onCreateFile &&
+									!onDeleteFolder
+								)
 									return;
 								event.preventDefault();
 								setOpenActionsPath(
@@ -412,30 +429,36 @@ export function Sidebar({
 									<span className="min-w-0 flex-1 truncate">{row.label}</span>
 								</button>
 							)}
-							{row.kind === "folder" && (onCreateFile || onDeleteFolder) && (
-								<FolderActionsMenu
-									id={row.id}
-									label={row.label}
-									open={openActionsPath === row.id}
-									onOpenChange={(open) =>
-										setOpenActionsPath(open ? row.id : null)
-									}
-									onCreateFile={(id) => void createFile(id)}
-									onDeleteFolder={onDeleteFolder}
-								/>
-							)}
-							{row.kind === "file" && (onRenameFile || onDeleteFile) && (
-								<FileActionsMenu
-									file={row.file}
-									label={row.label}
-									open={openActionsPath === row.file.path}
-									onOpenChange={(open) =>
-										setOpenActionsPath(open ? row.file.path : null)
-									}
-									onRenameFile={beginRename}
-									onDeleteFile={onDeleteFile}
-								/>
-							)}
+							{row.kind === "folder" &&
+								(onRevealFolder || onCreateFile || onDeleteFolder) && (
+									<FolderActionsMenu
+										id={row.id}
+										label={row.label}
+										open={openActionsPath === row.id}
+										onOpenChange={(open) =>
+											setOpenActionsPath(open ? row.id : null)
+										}
+										onRevealFolder={onRevealFolder}
+										revealLabel={revealLabel}
+										onCreateFile={(id) => void createFile(id)}
+										onDeleteFolder={onDeleteFolder}
+									/>
+								)}
+							{row.kind === "file" &&
+								(onRevealFile || onRenameFile || onDeleteFile) && (
+									<FileActionsMenu
+										file={row.file}
+										label={row.label}
+										open={openActionsPath === row.file.path}
+										onOpenChange={(open) =>
+											setOpenActionsPath(open ? row.file.path : null)
+										}
+										onRevealFile={onRevealFile}
+										revealLabel={revealLabel}
+										onRenameFile={beginRename}
+										onDeleteFile={onDeleteFile}
+									/>
+								)}
 						</div>
 					);
 				})}
@@ -610,6 +633,8 @@ function FolderActionsMenu({
 	label,
 	open,
 	onOpenChange,
+	onRevealFolder,
+	revealLabel,
 	onCreateFile,
 	onDeleteFolder,
 }: {
@@ -617,11 +642,21 @@ function FolderActionsMenu({
 	label: string;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
+	onRevealFolder?: (id: string) => void;
+	revealLabel?: string;
 	onCreateFile?: (id: string) => void;
 	onDeleteFolder?: (id: string) => void;
 }) {
 	return (
 		<ActionsMenu label={label} open={open} onOpenChange={onOpenChange}>
+			{onRevealFolder && (
+				<ActionItem
+					icon={<MingcuteFolderOpenLine />}
+					onClick={() => onRevealFolder(id)}
+				>
+					{revealLabel ?? "Reveal in File Manager"}
+				</ActionItem>
+			)}
 			{onCreateFile && (
 				<ActionItem
 					icon={<MingcuteEditLine />}
@@ -652,6 +687,8 @@ function FileActionsMenu({
 	label,
 	open,
 	onOpenChange,
+	onRevealFile,
+	revealLabel,
 	onRenameFile,
 	onDeleteFile,
 }: {
@@ -659,11 +696,21 @@ function FileActionsMenu({
 	label: string;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
+	onRevealFile?: (path: string) => void;
+	revealLabel?: string;
 	onRenameFile?: (file: SidebarFile, label: string) => void;
 	onDeleteFile?: (path: string) => void;
 }) {
 	return (
 		<ActionsMenu label={label} open={open} onOpenChange={onOpenChange}>
+			{onRevealFile && (
+				<ActionItem
+					icon={<MingcuteFolderOpenLine />}
+					onClick={() => onRevealFile(file.path)}
+				>
+					{revealLabel ?? "Reveal in File Manager"}
+				</ActionItem>
+			)}
 			{onRenameFile && (
 				<ActionItem
 					icon={<MingcuteEditLine />}
