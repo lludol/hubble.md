@@ -79,7 +79,7 @@ export function serializeFrontMatter(properties: FileProperty[]): string {
 			lines.push(property.raw.trimEnd());
 			continue;
 		}
-		if (property.type === "text" && shouldQuoteText(property.value)) {
+		if (property.type === "text") {
 			lines.push(
 				`${property.key}: ${stringify(property.value, {
 					defaultStringType: "QUOTE_DOUBLE",
@@ -231,14 +231,4 @@ function isNumberString(value: string): boolean {
 	if (value.length === 0) return false;
 	if (!/^-?(?:\d+|\d*\.\d+)$/.test(value)) return false;
 	return Number.isFinite(Number(value));
-}
-
-function shouldQuoteText(value: string): boolean {
-	const trimmed = value.trim();
-	return (
-		trimmed === "true" ||
-		trimmed === "false" ||
-		parseDateInput(trimmed) !== null ||
-		isNumberString(trimmed)
-	);
 }

@@ -95,6 +95,7 @@ Body`);
 
 	it("serializes supported properties as normalized YAML", () => {
 		const yaml = serializeFrontMatter([
+			{ key: "description", type: "text", value: 'Long text with "quotes"' },
 			{ key: "title", type: "text", value: "true" },
 			{ key: "date_text", type: "text", value: "2026-06-03" },
 			{ key: "count", type: "number", value: 3 },
@@ -103,7 +104,8 @@ Body`);
 			{ key: "tags", type: "tags", value: ["work", "draft"] },
 		]);
 
-		expect(yaml).toBe(`title: "true"
+		expect(yaml).toBe(`description: "Long text with \\"quotes\\""
+title: "true"
 date_text: "2026-06-03"
 count: 3
 published: false
