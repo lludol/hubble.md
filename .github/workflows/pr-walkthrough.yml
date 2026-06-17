@@ -11,9 +11,9 @@ on:
         type: string
 
 permissions:
-  contents: write
-  pull-requests: write
-  issues: write
+  contents: read
+  pull-requests: read
+  issues: read
   actions: read
 
 concurrency:
@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   generate:
-    name: Generate and publish walkthrough
+    name: Generate walkthrough
     runs-on: ubuntu-latest
     steps:
       - name: Resolve PR number
@@ -73,47 +73,3 @@ jobs:
           name: pr-walkthrough-${{ steps.pr.outputs.number }}
           path: .warp/pr-walkthrough
           if-no-files-found: error
-      - name: Publish walkthrough preview
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: .warp/pr-walkthrough
-          destination_dir: pr-walkthrough/pr-${{ steps.pr.outputs.number }}
-          keep_files: true
-
-      - name: Comment with live walkthrough URL
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PR_NUMBER: ${{ steps.pr.outputs.number }}
-          WALKTHROUGH_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/pr-walkthrough/pr-${{ steps.pr.outputs.number }}/
-        run: |
-          marker="<!-- pr-walkthrough-preview -->"
-          body_file="$RUNNER_TEMP/pr-walkthrough-comment.md"
-          cat > "$body_file" <<EOF
-          $marker
-          ## PR Walkthrough Visualizer
-
-          View the generated PR walkthrough visualizer:
-
-          $WALKTHROUGH_URL
-
-          _Updated by the PR Walkthrough workflow for run $GITHUB_RUN_ID._
-          EOF
-
-          body="$(cat "$body_file")"
-
-          existing_comment_id="$(
-            gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
-              --jq ".[] | select(.user.type == \"Bot\" and (.body | contains(\"$marker\"))) | .id" \
-              | tail -n 1
-          )"
-
-          if [ -n "$existing_comment_id" ]; then
-            gh api \
-              --method PATCH \
-              "repos/$GITHUB_REPOSITORY/issues/comments/$existing_comment_id" \
-              -f body="$body"
-          else
-            gh pr comment "$PR_NUMBER" --body-file "$body_file"
-          fi
