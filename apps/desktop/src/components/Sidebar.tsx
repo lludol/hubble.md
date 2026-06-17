@@ -1,6 +1,8 @@
 import { Button, Sidebar as SharedSidebar, SidebarFrame } from "@hubble.md/ui";
 import { useStoreValue } from "@simplestack/store/react";
 import type { ReactNode } from "react";
+import { desktopApi } from "../desktopApi";
+import { revealFileLabel } from "../lib/revealFile";
 import {
 	createMarkdownFileInFolder,
 	deleteFolder,
@@ -78,6 +80,11 @@ export function Sidebar({ footer }: { footer?: ReactNode }) {
 			onCollapse={collapseSidebar}
 			onSortModeChange={setSortMode}
 			onSelectFile={(path) => void loadPath(path)}
+			onRevealFile={(path) => void desktopApi.revealFile(path)}
+			onRevealFolder={(folderId) =>
+				void desktopApi.revealFile(absolutePath(folderId))
+			}
+			revealLabel={revealFileLabel(desktopApi.platform)}
 			onRenameFile={(path, nextName) => void renameMarkdownFile(path, nextName)}
 			onDeleteFile={(path) => void deleteMarkdownFile(path)}
 			onCreateFile={(folderId) =>
