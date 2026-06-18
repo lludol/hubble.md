@@ -44,7 +44,7 @@ const sidebarActionClass =
 const sidebarActionIconClass =
 	"inline-flex size-4 shrink-0 items-center justify-center [&_svg]:size-3.5";
 const sidebarRowContentClass =
-	"flex min-w-0 flex-1 items-center gap-1 [padding-block:var(--row-pad-block)] [padding-inline-end:var(--row-pad-inline)] text-start text-[length:var(--font-size-sidebar)]";
+	"flex min-w-0 flex-1 items-center gap-1 [padding-block:var(--row-pad-block)] [padding-inline-end:1.25rem] text-start text-[length:var(--font-size-sidebar)]";
 const sidebarRowActionButtonClass =
 	"inline-flex size-5 shrink-0 items-center justify-center rounded-sm border border-transparent bg-transparent text-muted-foreground/70 opacity-0 outline-hidden transition-[opacity,color] hover:text-foreground focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/40 group-hover/sidebar-row:opacity-100 aria-expanded:text-foreground aria-expanded:opacity-100";
 const DEFAULT_SIDEBAR_WIDTH = 220;
@@ -335,10 +335,10 @@ export function Sidebar({
 					const isFocused = focusedIndex === index;
 					const isRenaming =
 						row.kind === "file" && row.file.path === renamingPath;
+					const isPinnedFile = row.kind === "file" && row.file.pinned;
+					const canTogglePinnedFile = isPinnedFile && onTogglePinnedFile;
 					const isPinnedSectionEnd =
-						row.kind === "file" &&
-						row.file.pinned &&
-						rows[index + 1]?.kind !== "file";
+						isPinnedFile && rows[index + 1]?.kind !== "file";
 					if (row.kind === "section") {
 						return (
 							<div
@@ -435,9 +435,6 @@ export function Sidebar({
 									className={cn(
 										sidebarRowContentClass,
 										"truncate border-none bg-transparent",
-										row.kind === "file" &&
-											row.file.pinned &&
-											"[padding-inline-end:1.75rem]",
 									)}
 									style={rowStyle}
 									onClick={(event) => {
@@ -457,22 +454,20 @@ export function Sidebar({
 									<span
 										className={cn(
 											"min-w-0 flex-1 truncate",
-											row.kind === "file" &&
-												row.file.pinned &&
-												"[direction:rtl] [text-align:left]",
+											isPinnedFile && "[direction:rtl] [text-align:left]",
 										)}
 									>
 										{row.label}
 									</span>
 								</button>
 							)}
-							{row.kind === "file" && row.file.pinned && onTogglePinnedFile && (
+							{canTogglePinnedFile && (
 								<span
 									className={cn(
-										"pointer-events-none absolute inset-y-0 end-0 w-12 rounded-e-[var(--radius-row)] opacity-0 transition-opacity group-hover/sidebar-row:opacity-100",
+										"pointer-events-none absolute inset-y-0 end-0 w-16 rounded-e-[var(--radius-row)] opacity-0 transition-opacity group-hover/sidebar-row:opacity-100",
 										isActive
-											? "bg-linear-to-r from-transparent from-0% via-sidebar-accent via-35% to-sidebar-accent"
-											: "bg-linear-to-r from-transparent from-0% via-accent via-35% to-accent",
+											? "bg-linear-to-r from-transparent from-0% via-sidebar-accent via-25% to-sidebar-accent"
+											: "bg-linear-to-r from-transparent from-0% via-accent via-25% to-accent",
 									)}
 								/>
 							)}
@@ -492,22 +487,20 @@ export function Sidebar({
 											onDeleteFolder={onDeleteFolder}
 										/>
 									)}
-								{row.kind === "file" &&
-									row.file.pinned &&
-									onTogglePinnedFile && (
-										<button
-											type="button"
-											className={sidebarRowActionButtonClass}
-											aria-label={`Unpin ${row.label}`}
-											title={`Unpin ${row.label}`}
-											onClick={(event) => {
-												event.stopPropagation();
-												onTogglePinnedFile(row.file.path);
-											}}
-										>
-											<MingcutePinFill className="size-3.5" />
-										</button>
-									)}
+								{canTogglePinnedFile && (
+									<button
+										type="button"
+										className={sidebarRowActionButtonClass}
+										aria-label="Unpin"
+										title="Unpin"
+										onClick={(event) => {
+											event.stopPropagation();
+											onTogglePinnedFile(row.file.path);
+										}}
+									>
+										<MingcutePinFill className="size-3.5" />
+									</button>
+								)}
 								{row.kind === "file" &&
 									(onRevealFile ||
 										onRenameFile ||

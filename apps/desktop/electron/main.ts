@@ -18,6 +18,7 @@ import {
 } from "electron";
 import electronUpdater from "electron-updater";
 import ignore from "ignore";
+import { z } from "zod/v4";
 import type {
 	DesktopUpdateState,
 	WorkspaceConfig,
@@ -99,6 +100,19 @@ const ignoredWorkspaceDirs = new Set([".git", "dist", "node_modules"]);
 const workspaceConfigVersion = 1;
 const workspaceConfigDir = ".hubble";
 const workspaceConfigFile = "config.json";
+const workspaceConfigSchema = z.object({
+	version: z.literal(workspaceConfigVersion),
+	pinnedNotes: z.array(
+		z
+			.string()
+			.min(1)
+			// Pin refs live inside the workspace config; reject absolute paths and
+			// traversal so config edits cannot point pin state outside the workspace.
+			.refine(
+				(note) => !path.isAbsolute(note) && !note.split("/").includes(".."),
+			),
+	),
+});
 const iframeHeadStyles = [
 	{ name: "hubble-theme", source: embedTheme },
 ] as const;
@@ -124,38 +138,20 @@ function emptyWorkspaceConfig(): WorkspaceConfig {
 	return { version: workspaceConfigVersion, pinnedNotes: [] };
 }
 
-function isValidConfigNote(note: unknown): note is string {
-	return (
-		typeof note === "string" &&
-		note.length > 0 &&
-		!path.isAbsolute(note) &&
-		!note.split("/").includes("..")
-	);
-}
-
 function parseWorkspaceConfig(raw: string): WorkspaceConfig {
 	try {
-		const parsed = JSON.parse(raw) as {
-			version?: unknown;
-			pinnedNotes?: unknown;
-		};
-		if (parsed.version !== workspaceConfigVersion)
-			return emptyWorkspaceConfig();
-		if (!Array.isArray(parsed.pinnedNotes)) return emptyWorkspaceConfig();
-		const pinnedNotes = parsed.pinnedNotes.filter(isValidConfigNote);
-		return { version: workspaceConfigVersion, pinnedNotes };
+		return workspaceConfigSchema.parse(JSON.parse(raw));
 	} catch {
 		return emptyWorkspaceConfig();
 	}
 }
 
 function normalizeWorkspaceConfig(input: WorkspaceConfig): WorkspaceConfig {
-	const pinnedNotes = Array.isArray(input.pinnedNotes)
-		? input.pinnedNotes.filter(isValidConfigNote)
-		: [];
+	const config = workspaceConfigSchema.safeParse(input);
+	if (!config.success) return emptyWorkspaceConfig();
 	return {
 		version: workspaceConfigVersion,
-		pinnedNotes: [...new Set(pinnedNotes)],
+		pinnedNotes: [...new Set(config.data.pinnedNotes)],
 	};
 }
 

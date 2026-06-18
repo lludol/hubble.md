@@ -73,6 +73,17 @@ async function writePinnedNotes(workspacePath: string, pinnedNotes: string[]) {
 	});
 }
 
+async function syncPinnedNotes() {
+	const workspacePath = workspaceStore.get().workspacePath;
+	if (!workspacePath) return;
+	try {
+		await writePinnedNotes(workspacePath, workspaceStore.get().pinnedNotes);
+	} catch (err) {
+		const message = err instanceof Error ? err.message : String(err);
+		toast.error("Failed to update pinned notes", { description: message });
+	}
+}
+
 export function touchFile(path: string) {
 	workspaceStore.set((state) => {
 		if (!isInWorkspace(path, state.workspacePath)) return state;
@@ -315,10 +326,7 @@ export async function renameMarkdownFile(path: string, nextName: string) {
 						: state.document.lastOpenedPath,
 			},
 		}));
-		const workspacePath = workspaceStore.get().workspacePath;
-		if (workspacePath) {
-			await writePinnedNotes(workspacePath, workspaceStore.get().pinnedNotes);
-		}
+		await syncPinnedNotes();
 		await refreshFiles();
 		if (isCurrentFile) {
 			await loadPath(nextPath);
@@ -389,10 +397,7 @@ export async function deleteMarkdownFile(path: string) {
 									: state.document.lastOpenedPath,
 						},
 		}));
-		const workspacePath = workspaceStore.get().workspacePath;
-		if (workspacePath) {
-			await writePinnedNotes(workspacePath, workspaceStore.get().pinnedNotes);
-		}
+		await syncPinnedNotes();
 		await refreshFiles();
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
@@ -437,10 +442,7 @@ export async function deleteFolder(path: string) {
 									: state.document.lastOpenedPath,
 						},
 		}));
-		const workspacePath = workspaceStore.get().workspacePath;
-		if (workspacePath) {
-			await writePinnedNotes(workspacePath, workspaceStore.get().pinnedNotes);
-		}
+		await syncPinnedNotes();
 		await refreshFiles();
 	} catch (err) {
 		const message = err instanceof Error ? err.message : String(err);
