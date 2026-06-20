@@ -124,6 +124,7 @@ export function SlashCommandMenu({
 	const [selectedKind, setSelectedKind] =
 		useState<SlashCommandKind>("paragraph");
 	const suppressedFromRef = useRef<number | null>(null);
+	const positionedFromRef = useRef<number | null>(null);
 	const menuRef = useRef<HTMLDivElement | null>(null);
 	const visibleCommands = SLASH_COMMANDS.filter((command) =>
 		matchesCommand(command, token?.query ?? ""),
@@ -146,16 +147,21 @@ export function SlashCommandMenu({
 			const nextToken = findSlashToken(editor);
 			if (!nextToken) {
 				suppressedFromRef.current = null;
+				positionedFromRef.current = null;
 				setToken(null);
 				setPosition(null);
 				return;
 			}
 			if (suppressedFromRef.current === nextToken.from) {
+				positionedFromRef.current = null;
 				setToken(null);
 				setPosition(null);
 				return;
 			}
-			setPosition(null);
+			if (positionedFromRef.current !== nextToken.from) {
+				positionedFromRef.current = nextToken.from;
+				setPosition(null);
+			}
 			setToken(nextToken);
 		};
 
