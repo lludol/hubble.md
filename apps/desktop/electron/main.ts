@@ -319,6 +319,15 @@ async function pathExistsAsFile(input: string): Promise<boolean> {
 	}
 }
 
+async function pathExists(input: string): Promise<boolean> {
+	try {
+		await fs.stat(input);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 function firstExistingFileArg(args: string[]): string | null {
 	for (const arg of args) {
 		if (arg.startsWith("-")) continue;
@@ -831,6 +840,7 @@ function registerIpc() {
 		"desktop:write-file-text",
 		async (_event, { path: filePath, content }) => {
 			const resolved = assertGranted(filePath);
+			await fs.mkdir(path.dirname(resolved), { recursive: true });
 			await fs.writeFile(resolved, String(content));
 		},
 	);
@@ -841,9 +851,14 @@ function registerIpc() {
 			const from = assertGranted(fromPath);
 			const to = resolvePath(toPath);
 			assertGranted(path.dirname(to));
+			await fs.mkdir(path.dirname(to), { recursive: true });
 			await fs.rename(from, to);
 			grantFileWithParent(to);
 		},
+	);
+
+	ipcMain.handle("desktop:path-exists", async (_event, { path: filePath }) =>
+		pathExists(assertGranted(filePath)),
 	);
 
 	ipcMain.handle(

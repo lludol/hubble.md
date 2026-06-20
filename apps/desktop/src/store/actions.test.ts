@@ -7,6 +7,7 @@ type MockDesktopApi = {
 	readWorkspaceConfig: ReturnType<typeof vi.fn>;
 	writeWorkspaceConfig: ReturnType<typeof vi.fn>;
 	renameFile: ReturnType<typeof vi.fn>;
+	pathExists: ReturnType<typeof vi.fn>;
 };
 
 function createDesktopApi(): MockDesktopApi {
@@ -17,6 +18,7 @@ function createDesktopApi(): MockDesktopApi {
 		readWorkspaceConfig: vi.fn(async () => ({ version: 1, pinnedNotes: [] })),
 		writeWorkspaceConfig: vi.fn(async () => {}),
 		renameFile: vi.fn(async () => {}),
+		pathExists: vi.fn(async () => false),
 	};
 }
 
@@ -192,8 +194,135 @@ describe("desktop renameMarkdownFile", () => {
 		});
 	});
 
+	it("renames to nested paths relative to the current folder", async () => {
+		const api = createDesktopApi();
+		api.listDirectory.mockResolvedValue([
+			{ path: "/workspace/notes/archive/q1-plan.md", modified_at: 1 },
+		]);
+		const { appStore, renameMarkdownFile, viewerStore } =
+			await loadStoreActions(api);
+
+		appStore.set((current) => ({
+			...current,
+			workspace: {
+				...current.workspace,
+				workspacePath: "/workspace",
+				files: [{ path: "/workspace/notes/plan.md", modified_at: 1 }],
+			},
+			document: {
+				...current.document,
+				currentPath: "/workspace/notes/plan.md",
+				lastOpenedPath: "/workspace/notes/plan.md",
+				content: "plan",
+				diskContent: "plan",
+				externalChange: { kind: "none" },
+				status: "ready",
+				error: null,
+			},
+		}));
+
+		await renameMarkdownFile("/workspace/notes/plan.md", "archive/q1-plan");
+
+		expect(api.renameFile).toHaveBeenCalledWith(
+			"/workspace/notes/plan.md",
+			"/workspace/notes/archive/q1-plan.md",
+		);
+		expect(viewerStore.get().currentPath).toBe(
+			"/workspace/notes/archive/q1-plan.md",
+		);
+	});
+
+	it("renames to nested paths in Windows workspaces", async () => {
+		const api = createDesktopApi();
+		api.listDirectory.mockResolvedValue([
+			{ path: "C:/workspace/notes/archive/q1-plan.md", modified_at: 1 },
+		]);
+		const { appStore, renameMarkdownFile, viewerStore } =
+			await loadStoreActions(api);
+
+		appStore.set((current) => ({
+			...current,
+			workspace: {
+				...current.workspace,
+				workspacePath: "C:\\workspace",
+				files: [{ path: "C:\\workspace\\notes\\plan.md", modified_at: 1 }],
+			},
+			document: {
+				...current.document,
+				currentPath: "C:\\workspace\\notes\\plan.md",
+				lastOpenedPath: "C:\\workspace\\notes\\plan.md",
+				content: "plan",
+				diskContent: "plan",
+				externalChange: { kind: "none" },
+				status: "ready",
+				error: null,
+			},
+		}));
+
+		await renameMarkdownFile(
+			"C:\\workspace\\notes\\plan.md",
+			"archive/q1-plan",
+		);
+
+		expect(api.renameFile).toHaveBeenCalledWith(
+			"C:\\workspace\\notes\\plan.md",
+			"C:/workspace/notes/archive/q1-plan.md",
+		);
+		expect(viewerStore.get().currentPath).toBe(
+			"C:/workspace/notes/archive/q1-plan.md",
+		);
+	});
+
+	it("does not rename a missing asset folder", async () => {
+		const api = createDesktopApi();
+		const { appStore, renameMarkdownFile } = await loadStoreActions(api);
+
+		appStore.set((current) => ({
+			...current,
+			workspace: {
+				...current.workspace,
+				workspacePath: "/workspace",
+				files: [{ path: "/workspace/notes/draft.md", modified_at: 1 }],
+			},
+		}));
+
+		await renameMarkdownFile("/workspace/notes/draft.md", "archive/draft");
+
+		expect(api.pathExists).toHaveBeenCalledWith(
+			"/workspace/notes/draft.assets",
+		);
+		expect(api.renameFile).toHaveBeenCalledTimes(1);
+		expect(api.renameFile).toHaveBeenCalledWith(
+			"/workspace/notes/draft.md",
+			"/workspace/notes/archive/draft.md",
+		);
+		expect(api.renameFile).not.toHaveBeenCalledWith(
+			"/workspace/notes/draft.assets",
+			"/workspace/notes/archive/draft.assets",
+		);
+	});
+
+	it("rejects rename paths outside the workspace", async () => {
+		const api = createDesktopApi();
+		const { appStore, renameMarkdownFile } = await loadStoreActions(api);
+
+		appStore.set((current) => ({
+			...current,
+			workspace: {
+				...current.workspace,
+				workspacePath: "/workspace",
+				files: [{ path: "/workspace/original.md", modified_at: 1 }],
+			},
+		}));
+
+		await renameMarkdownFile("/workspace/original.md", "../outside.md");
+
+		expect(api.renameFile).not.toHaveBeenCalled();
+	});
+
 	it("updates backlinks to the renamed file", async () => {
 		const api = createDesktopApi();
+		api.pathExists.mockResolvedValue(true);
 		api.readFileText.mockImplementation(async (path: string) => {
 			if (path === "/workspace/notes/source.md") {
 				return [
@@ -234,6 +363,7 @@ describe("desktop renameMarkdownFile", () => {
 
 	it("renames the associated asset folder and updates refs", async () => {
 		const api = createDesktopApi();
+		api.pathExists.mockResolvedValue(true);
 		api.readFileText.mockImplementation(async (path: string) => {
 			if (path === "/workspace/learning.md") {
 				return "![Recall](effective-learning-techniques.assets/recall.jpg)";
@@ -413,6 +543,7 @@ describe("desktop moveSidebarItem", () => {
 
 	it("moves the associated asset folder with a moved file", async () => {
 		const api = createDesktopApi();
+		api.pathExists.mockResolvedValue(true);
 		api.readFileText.mockResolvedValue(
 			"![Recall](source.assets/recall-diagram.jpg)",
 		);

@@ -32,6 +32,7 @@ const desktopApi = {
 		ipcRenderer.invoke("desktop:write-file-text", { path, content }),
 	renameFile: (fromPath, toPath) =>
 		ipcRenderer.invoke("desktop:rename-file", { fromPath, toPath }),
+	pathExists: (path) => ipcRenderer.invoke("desktop:path-exists", { path }),
 	persistPastedImage: (input) =>
 		ipcRenderer.invoke("desktop:persist-pasted-image", input),
 	deleteFile: (path, options) =>

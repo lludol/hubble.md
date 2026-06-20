@@ -8,6 +8,7 @@ import {
 	extname,
 	joinPath,
 	markdownAssetFolderPath,
+	normalizePath,
 	pathEquals,
 	pathInFolder,
 	relativeWorkspacePath,
@@ -137,6 +138,9 @@ async function moveAssociatedAssetFolder(
 	) {
 		return null;
 	}
+	// Asset folders are optional; check first so Electron does not log a
+	// rejected rename for normal notes without assets.
+	if (!(await desktopApi.pathExists(fromAssetFolder))) return null;
 	try {
 		await desktopApi.renameFile(fromAssetFolder, toAssetFolder);
 		return { fromPath: fromAssetFolder, toPath: toAssetFolder };
@@ -434,19 +438,22 @@ export async function savePathContent(
 export async function renameMarkdownFile(path: string, nextName: string) {
 	const current = viewerStore.get();
 	const isCurrentFile = current.currentPath === path;
-	const filesBeforeRename = workspaceStore.get().files;
+	const { files: filesBeforeRename, workspacePath } = workspaceStore.get();
 
 	const trimmedName = nextName.trim();
-	if (trimmedName.length === 0 || /[\\/]/.test(trimmedName)) return;
+	if (trimmedName.length === 0) return;
 
 	const parent = dirname(path);
 	if (!parent) return;
 
 	const currentExt = extname(path);
-	const nextFileName = /\.[^/.\\]+$/.test(trimmedName)
+	const nextNameWithExt = /\.[^/.\\]+$/.test(trimmedName)
 		? trimmedName
 		: `${trimmedName}${currentExt}`;
-	const nextPath = joinPath(parent, nextFileName);
+	// Slash paths are relative to the current file's folder, matching sidebar
+	// rename behavior for nested notes.
+	const nextPath = normalizePath(joinPath(parent, nextNameWithExt));
+	if (!isSafeRelativeRenamePath(trimmedName, nextPath, workspacePath)) return;
 	if (nextPath === path) return;
 
 	try {
@@ -508,6 +515,31 @@ export async function renameCurrentMarkdownFile(nextName: string) {
 	const current = viewerStore.get();
 	if (!current.currentPath) return;
 	await renameMarkdownFile(current.currentPath, nextName);
+}
+
+function isSafeRelativeRenamePath(
+	name: string,
+	nextPath: string,
+	workspacePath: string | null,
+) {
+	if (!/[\\/]/.test(name)) return true;
+	if (!workspacePath) return false;
+	if (
+		name.startsWith("/") ||
+		name.startsWith("\\") ||
+		/^[a-zA-Z]:[\\/]/.test(name)
+	) {
+		return false;
+	}
+	const normalized = normalizePath(name);
+	if (
+		normalized === "." ||
+		normalized === ".." ||
+		normalized.startsWith("../")
+	) {
+		return false;
+	}
+	return pathInFolder(nextPath, normalizePath(workspacePath));
 }
 
 export async function moveSidebarItem(
