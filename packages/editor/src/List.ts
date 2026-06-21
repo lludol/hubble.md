@@ -32,6 +32,9 @@ export const ListItemExtension = ListItem.extend({
 			const checkboxWrapper = document.createElement("label");
 			const checkboxStyler = document.createElement("span");
 			const checkbox = document.createElement("input");
+
+			checkboxWrapper.className = "pm-task-checkbox";
+			checkboxStyler.className = "pm-task-checkbox-box";
 			const content = document.createElement("div");
 
 			const updateA11Y = (currentNode: PMNode) => {

@@ -112,7 +112,7 @@
 }
 
 [data-hubble-editor] .ProseMirror li + li,
-[data-hubble-editor] .ProseMirror li > :is(ul, ol) {
+[data-hubble-editor] .ProseMirror li > div > :is(ul, ol) {
 	margin-block-start: var(--editor-list-gap);
 }
 
@@ -124,13 +124,110 @@
 }
 
 [data-hubble-editor] .ProseMirror ul > li[data-checked] > label {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+	/* exactly one line tall so the box centers on the first text line */
+	block-size: 1lh;
 	flex: 0 0 auto;
 	margin-inline-end: 0.55rem;
 	user-select: none;
+	cursor: pointer;
 }
 
 [data-hubble-editor] .ProseMirror ul > li[data-checked] > div {
 	flex: 1 1 auto;
+}
+
+/* The node view renders the checkbox label for every list item; only show it
+ * for actual task items (those carry data-checked on the <li>). */
+[data-hubble-editor] .ProseMirror li:not([data-checked]) > .pm-task-checkbox {
+	display: none;
+}
+
+/* Custom forest-green task checkbox. The native input is kept for
+ * interaction/accessibility but visually replaced by .pm-task-checkbox-box. */
+[data-hubble-editor] .pm-task-checkbox > input {
+	position: absolute;
+	inline-size: 1.1em;
+	block-size: 1.1em;
+	margin: 0;
+	opacity: 0;
+	cursor: pointer;
+}
+
+[data-hubble-editor] .pm-task-checkbox-box {
+	/* mingcute check-line glyph */
+	--pm-task-check-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='M21.192 5.465a1 1 0 0 1 0 1.414L9.95 18.122a1.1 1.1 0 0 1-1.556 0l-5.586-5.586a1 1 0 1 1 1.415-1.415l4.95 4.95L19.777 5.465a1 1 0 0 1 1.414 0Z'/%3E%3C/svg%3E");
+	display: inline-grid;
+	place-content: center;
+	inline-size: 1.1em;
+	block-size: 1.1em;
+	border: 1.5px solid color-mix(in oklab, var(--brand) 40%, var(--border));
+	border-radius: 0.32em;
+	background: var(--background);
+	transition:
+		background-color 160ms var(--ease-snappy),
+		border-color 160ms var(--ease-snappy),
+		transform 140ms var(--ease-snappy);
+}
+
+[data-hubble-editor] .pm-task-checkbox-box::after {
+	content: "";
+	inline-size: 0.9em;
+	block-size: 0.9em;
+	background-color: var(--primary-foreground);
+	-webkit-mask: var(--pm-task-check-mask) center / contain no-repeat;
+	mask: var(--pm-task-check-mask) center / contain no-repeat;
+	transform: scale(0);
+	transform-origin: center;
+	opacity: 0;
+	transition:
+		transform 140ms var(--ease-snappy),
+		opacity 100ms var(--ease-snappy);
+}
+
+/* Hover: hint the forest green before commit. */
+[data-hubble-editor] .pm-task-checkbox:hover .pm-task-checkbox-box {
+	border-color: color-mix(in oklab, var(--brand) 70%, var(--border));
+}
+
+[data-hubble-editor] .pm-task-checkbox > input:active + .pm-task-checkbox-box {
+	transform: scale(0.88);
+}
+
+/* Checked: fill with forest green and pop in the checkmark. */
+[data-hubble-editor] .pm-task-checkbox > input:checked + .pm-task-checkbox-box {
+	background: var(--brand);
+	border-color: var(--brand);
+	animation: hubble-task-check-pop 180ms var(--ease-snappy);
+}
+
+[data-hubble-editor]
+	.pm-task-checkbox
+	> input:checked
+	+ .pm-task-checkbox-box::after {
+	transform: scale(1);
+	opacity: 1;
+}
+
+/* The native input is only visually hidden (opacity 0), so it stays in the tab
+ * order; when keyboard focus lands on it, draw the ring on the visible box. */
+[data-hubble-editor]
+	.pm-task-checkbox
+	> input:focus-visible
+	+ .pm-task-checkbox-box {
+	outline: 2px solid var(--ring);
+	outline-offset: 2px;
+}
+
+@keyframes hubble-task-check-pop {
+	0% {
+		transform: scale(0.85);
+	}
+	100% {
+		transform: scale(1);
+	}
 }
 
 [data-hubble-editor] .ProseMirror blockquote {
