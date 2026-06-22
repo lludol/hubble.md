@@ -747,8 +747,8 @@ function matchesGlob(relativePath: string, glob: string): boolean {
 async function createWindow() {
 	mainWindow = new BrowserWindow({
 		title: appName,
-		width: 800,
-		height: 600,
+		width: 920,
+		height: 720,
 		titleBarStyle: "hidden",
 		trafficLightPosition: { x: 12, y: 10 },
 		webPreferences: {
