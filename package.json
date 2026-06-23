@@ -18,6 +18,7 @@
 		"build": "pnpm check && pnpm -r --if-present build && pnpm typecheck",
 		"build:desktop": "pnpm --filter @hubble.md/desktop... --if-present build && pnpm --filter @hubble.md/desktop... --if-present typecheck",
 		"bundle:desktop": "pnpm --filter @hubble.md/desktop... --if-present build && pnpm --filter @hubble.md/desktop bundle",
+		"bundle:desktop:linux": "pnpm --filter @hubble.md/desktop... --if-present build && pnpm --filter @hubble.md/desktop bundle:linux",
 		"postinstall": "pnpm --filter @hubble.md/desktop exec install-electron",
 		"dev:desktop": "pnpm -r --parallel --stream --filter @hubble.md/desktop... --if-present dev",
 		"dev:desktop:debug": "HUBBLE_DESKTOP_ENABLE_CDP=1 pnpm -r --parallel --stream --filter @hubble.md/desktop... --if-present dev",

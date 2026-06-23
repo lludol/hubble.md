@@ -19,6 +19,7 @@
 		"dev:debug": "HUBBLE_DESKTOP_ENABLE_CDP=1 node scripts/dev.mjs",
 		"build": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit && electron-vite build",
 		"bundle": "pnpm build && electron-builder --mac",
+		"bundle:linux": "pnpm build && electron-builder --linux",
 		"bundle:publish": "pnpm build && electron-builder --mac --publish always",
 		"preview": "vite preview",
 		"sync:playground": "node scripts/sync-playground.mjs",
@@ -96,6 +97,21 @@
 				"zip"
 			],
 			"category": "public.app-category.productivity"
+		},
+		"linux": {
+			"target": [
+				"AppImage",
+				"deb"
+			],
+			"icon": "assets/icon.png",
+			"category": "Office",
+			"maintainer": "Ben Holmes <hey@bholmes.dev>",
+			"synopsis": "Local-first Markdown editor",
+			"executableName": "hubble",
+			"artifactName": "Hubble-${version}-${arch}.${ext}"
+		},
+		"deb": {
+			"packageName": "hubble"
 		},
 		"fileAssociations": [
 			{
