@@ -117,11 +117,24 @@
 			{
 				"name": "Markdown Document",
 				"description": "Markdown text file",
-				"ext": [
-					"md",
-					"markdown",
-					"mdown"
-				],
+				"ext": "md",
+				"mimeType": "text/markdown",
+				"role": "Editor",
+				"rank": "Owner"
+			},
+			{
+				"name": "Markdown Document",
+				"description": "Markdown text file",
+				"ext": "markdown",
+				"mimeType": "text/markdown",
+				"role": "Editor",
+				"rank": "Owner"
+			},
+			{
+				"name": "Markdown Document",
+				"description": "Markdown text file",
+				"ext": "mdown",
+				"mimeType": "text/markdown",
 				"role": "Editor",
 				"rank": "Owner"
 			}

@@ -8,6 +8,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com).
 ## [Unreleased]
 
 ### Added
+- Linux desktop builds (AppImage and .deb)
 
 ### Changed
 
