@@ -3,6 +3,13 @@ export type FileEntry = {
 	modified_at: number;
 };
 
+export type FolderEntry = FileEntry;
+
+export type DirectoryListing = {
+	files: FileEntry[];
+	folders: FolderEntry[];
+};
+
 export type HtmlAppFileEntry = {
 	name: string;
 	path: string;
@@ -59,7 +66,7 @@ export type WorkspaceConfig = {
 export type DesktopApi = {
 	platform: DesktopPlatform;
 	homeDir: string;
-	listDirectory(path: string): Promise<FileEntry[]>;
+	listDirectory(path: string): Promise<DirectoryListing>;
 	listHtmlAppFiles(
 		workspacePath: string,
 		glob: string,

@@ -3,6 +3,7 @@ export {
 	Sidebar,
 	type SidebarFile,
 	type SidebarFocusedItem,
+	type SidebarFolder,
 	SidebarFrame,
 	type SidebarMoveItemInput,
 	type SidebarSortMode,

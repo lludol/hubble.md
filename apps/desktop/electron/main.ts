@@ -22,10 +22,12 @@ import ignore from "ignore";
 import { z } from "zod/v4";
 import type {
 	DesktopUpdateState,
+	DirectoryListing,
 	WorkspaceConfig,
 } from "../src/desktopApi/types";
 import {
 	hasDocumentExtension,
+	isHiddenSidebarFolderName,
 	markdownAssetFolderPath,
 	withMarkdownExtension,
 } from "../src/lib/filePath";
@@ -37,11 +39,6 @@ import {
 	trafficLightPositionForZoom,
 	zoomStep,
 } from "./zoom";
-
-type FileEntry = {
-	path: string;
-	modified_at: number;
-};
 
 type HtmlAppFileEntry = {
 	name: string;
@@ -836,7 +833,7 @@ function fileAssetsDir(filePath: string): string {
 
 async function collectDocumentFiles(
 	dir: string,
-	out: FileEntry[],
+	out: DirectoryListing,
 	inheritedRules: IgnoreRule[] = [],
 ) {
 	const rules = await rulesForDir(dir, inheritedRules);
@@ -845,10 +842,16 @@ async function collectDocumentFiles(
 		const entryPath = path.join(dir, entry.name);
 		if (isIgnoredByRules(entryPath, rules)) continue;
 		if (entry.isDirectory()) {
+			if (isHiddenSidebarFolderName(entry.name)) continue;
+			const stat = await fs.stat(entryPath);
+			out.folders.push({
+				path: entryPath,
+				modified_at: Math.floor(stat.mtimeMs / 1000),
+			});
 			await collectDocumentFiles(entryPath, out, rules);
 		} else if (isDocumentPath(entry.name)) {
 			const stat = await fs.stat(entryPath);
-			out.push({
+			out.files.push({
 				path: entryPath,
 				modified_at: Math.floor(stat.mtimeMs / 1000),
 			});
@@ -979,9 +982,9 @@ function registerIpc() {
 			const root = assertGrantedRoot(dirPath);
 			const stat = await fs.stat(root);
 			if (!stat.isDirectory()) throw new Error(`Not a directory: ${dirPath}`);
-			const entries: FileEntry[] = [];
-			await collectDocumentFiles(root, entries);
-			return entries;
+			const listing: DirectoryListing = { files: [], folders: [] };
+			await collectDocumentFiles(root, listing);
+			return listing;
 		},
 	);
 

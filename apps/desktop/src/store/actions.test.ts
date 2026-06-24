@@ -14,7 +14,7 @@ function createDesktopApi(): MockDesktopApi {
 	return {
 		readFileText: vi.fn(async () => "before"),
 		writeFileText: vi.fn(async () => {}),
-		listDirectory: vi.fn(async () => []),
+		listDirectory: vi.fn(async () => ({ files: [], folders: [] })),
 		readWorkspaceConfig: vi.fn(async () => ({ version: 1, pinnedNotes: [] })),
 		writeWorkspaceConfig: vi.fn(async () => {}),
 		renameFile: vi.fn(async () => {}),
@@ -131,9 +131,10 @@ describe("desktop renameMarkdownFile", () => {
 	it("reopens the active file from its renamed path", async () => {
 		const api = createDesktopApi();
 		api.readFileText.mockResolvedValue("embed content");
-		api.listDirectory.mockResolvedValue([
-			{ path: "/workspace/renamed.md", modified_at: 1 },
-		]);
+		api.listDirectory.mockResolvedValue({
+			files: [{ path: "/workspace/renamed.md", modified_at: 1 }],
+			folders: [],
+		});
 		const { appStore, renameMarkdownFile, viewerStore, workspaceStore } =
 			await loadStoreActions(api);
 		const path = "/workspace/original.md";
@@ -196,9 +197,10 @@ describe("desktop renameMarkdownFile", () => {
 
 	it("renames to nested paths relative to the current folder", async () => {
 		const api = createDesktopApi();
-		api.listDirectory.mockResolvedValue([
-			{ path: "/workspace/notes/archive/q1-plan.md", modified_at: 1 },
-		]);
+		api.listDirectory.mockResolvedValue({
+			files: [{ path: "/workspace/notes/archive/q1-plan.md", modified_at: 1 }],
+			folders: [],
+		});
 		const { appStore, renameMarkdownFile, viewerStore } =
 			await loadStoreActions(api);
 
@@ -234,9 +236,12 @@ describe("desktop renameMarkdownFile", () => {
 
 	it("renames to nested paths in Windows workspaces", async () => {
 		const api = createDesktopApi();
-		api.listDirectory.mockResolvedValue([
-			{ path: "C:/workspace/notes/archive/q1-plan.md", modified_at: 1 },
-		]);
+		api.listDirectory.mockResolvedValue({
+			files: [
+				{ path: "C:/workspace/notes/archive/q1-plan.md", modified_at: 1 },
+			],
+			folders: [],
+		});
 		const { appStore, renameMarkdownFile, viewerStore } =
 			await loadStoreActions(api);
 
@@ -451,9 +456,10 @@ describe("desktop moveSidebarItem", () => {
 
 	it("moves a file to a folder and updates opened state", async () => {
 		const api = createDesktopApi();
-		api.listDirectory.mockResolvedValue([
-			{ path: "/workspace/archive/note.md", modified_at: 1 },
-		]);
+		api.listDirectory.mockResolvedValue({
+			files: [{ path: "/workspace/archive/note.md", modified_at: 1 }],
+			folders: [],
+		});
 		const { appStore, moveSidebarItem, viewerStore, workspaceStore } =
 			await loadStoreActions(api);
 
@@ -702,9 +708,10 @@ describe("desktop loadPath", () => {
 		api.readFileText.mockRejectedValue(
 			new Error(`ENOENT: no such file or directory, open '${missingPath}'`),
 		);
-		api.listDirectory.mockResolvedValue([
-			{ path: remainingPath, modified_at: 2 },
-		]);
+		api.listDirectory.mockResolvedValue({
+			files: [{ path: remainingPath, modified_at: 2 }],
+			folders: [],
+		});
 		const { appStore, loadPath, workspaceStore } = await loadStoreActions(api);
 
 		appStore.set((current) => ({
@@ -735,7 +742,7 @@ describe("desktop loadPath", () => {
 			api.readFileText.mockRejectedValue(
 				new Error("ENOENT: no such file or directory"),
 			);
-			api.listDirectory.mockResolvedValue([]);
+			api.listDirectory.mockResolvedValue({ files: [], folders: [] });
 			const { appStore, loadPath } = await loadStoreActions(api);
 
 			appStore.set((current) => ({

@@ -15,6 +15,8 @@ export type FileEntry = {
 	modified_at: number;
 };
 
+export type FolderEntry = FileEntry;
+
 type ViewerStatus = "idle" | "loading" | "ready" | "error";
 type ExternalChange =
 	| { kind: "none" }

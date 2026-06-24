@@ -38,7 +38,7 @@ export function Sidebar({
 	const workspace = useStoreValue(workspaceStore);
 	const sidebarOpen = useStoreValue(sidebarOpenStore);
 	const currentPath = useStoreValue(currentPathStore);
-	const { workspacePath, files, pinnedNotes, sortMode } = workspace;
+	const { workspacePath, files, folders, pinnedNotes, sortMode } = workspace;
 	const pinnedSet = new Set(pinnedNotes);
 
 	if (!sidebarOpen) return null;
@@ -94,6 +94,10 @@ export function Sidebar({
 				path: file.path,
 				modifiedAt: file.modified_at,
 				pinned: pinnedSet.has(file.path),
+			}))}
+			folders={folders.map((folder) => ({
+				path: folder.path,
+				modifiedAt: folder.modified_at,
 			}))}
 			currentPath={currentPath ?? null}
 			sortMode={sortMode}

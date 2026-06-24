@@ -49,12 +49,13 @@ import { Button } from "../primitives/button";
 import { useSidebarKeyboardNav } from "./useSidebarKeyboardNav";
 import {
 	type SidebarFile,
+	type SidebarFolder,
 	type SidebarRow,
 	type SidebarSortMode,
 	useSidebarTree,
 } from "./useSidebarTree";
 
-export type { SidebarFile, SidebarSortMode };
+export type { SidebarFile, SidebarFolder, SidebarSortMode };
 
 export type SidebarMoveItemInput = {
 	item: { kind: "file"; path: string } | { kind: "folder"; folderId: string };
@@ -113,6 +114,7 @@ const segmentFirstCollision: CollisionDetection = (args) => {
 
 export function Sidebar({
 	files,
+	folders,
 	currentPath,
 	pendingPath,
 	sortMode,
@@ -137,6 +139,7 @@ export function Sidebar({
 	onMoveItem,
 }: {
 	files: SidebarFile[];
+	folders?: SidebarFolder[];
 	currentPath: string | null;
 	pendingPath?: string | null;
 	sortMode: SidebarSortMode;
@@ -180,6 +183,7 @@ export function Sidebar({
 	const highlightPath = pendingPath ?? currentPath;
 	const { collapseFolder, expandFolder, rows, toggleFolder } = useSidebarTree({
 		files,
+		folders,
 		getDisplayPath,
 		highlightPath,
 		sortMode,

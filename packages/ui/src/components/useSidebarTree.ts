@@ -9,6 +9,11 @@ export type SidebarFile = {
 	pinned?: boolean;
 };
 
+export type SidebarFolder = {
+	path: string;
+	modifiedAt?: number;
+};
+
 type FolderNode = {
 	id: string;
 	name: string;
@@ -53,12 +58,14 @@ const expandedFoldersSchema = z.array(z.string());
 
 export function useSidebarTree({
 	files,
+	folders = [],
 	getDisplayPath,
 	highlightPath,
 	sortMode,
 	storageScope,
 }: {
 	files: SidebarFile[];
+	folders?: SidebarFolder[];
 	getDisplayPath: (path: string) => string;
 	highlightPath: string | null;
 	sortMode: SidebarSortMode;
@@ -91,8 +98,8 @@ export function useSidebarTree({
 	}, [storageKey, expandedState]);
 
 	const tree = useMemo(
-		() => buildFileTree(files, getDisplayPath),
-		[files, getDisplayPath],
+		() => buildFileTree(files, folders, getDisplayPath),
+		[files, folders, getDisplayPath],
 	);
 	const activeAncestorIds = useMemo(
 		() =>
@@ -175,11 +182,25 @@ function makeFolder(id: string, name: string): FolderNode {
 	};
 }
 
-function buildFileTree(
+export function buildFileTree(
 	files: SidebarFile[],
+	folders: SidebarFolder[],
 	getDisplayPath: (path: string) => string,
 ): FolderNode {
 	const root = makeFolder("", "");
+
+	for (const folderEntry of folders) {
+		const displayPath = normalizeDisplayPath(getDisplayPath(folderEntry.path));
+		if (!displayPath) continue;
+		const segments = displayPath.split("/").filter(Boolean);
+		let parent = root;
+		const modifiedAt = folderEntry.modifiedAt ?? 0;
+		for (const segment of segments) {
+			const folder = ensureFolder(parent, segment);
+			folder.modifiedAt = Math.max(folder.modifiedAt, modifiedAt);
+			parent = folder;
+		}
+	}
 
 	for (const file of files) {
 		const displayPath = normalizeDisplayPath(getDisplayPath(file.path));
