@@ -3,10 +3,7 @@ export type FileEntry = {
 	modified_at: number;
 };
 
-export type FolderEntry = {
-	path: string;
-	modified_at: number;
-};
+export type FolderEntry = FileEntry;
 
 export type DirectoryListing = {
 	files: FileEntry[];

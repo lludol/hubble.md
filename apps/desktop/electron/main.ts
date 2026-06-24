@@ -22,6 +22,7 @@ import ignore from "ignore";
 import { z } from "zod/v4";
 import type {
 	DesktopUpdateState,
+	DirectoryListing,
 	WorkspaceConfig,
 } from "../src/desktopApi/types";
 import {
@@ -30,16 +31,6 @@ import {
 	markdownAssetFolderPath,
 	withMarkdownExtension,
 } from "../src/lib/filePath";
-
-type FileEntry = {
-	path: string;
-	modified_at: number;
-};
-
-type FolderEntry = {
-	path: string;
-	modified_at: number;
-};
 
 type HtmlAppFileEntry = {
 	name: string;
@@ -814,7 +805,7 @@ function fileAssetsDir(filePath: string): string {
 
 async function collectDocumentFiles(
 	dir: string,
-	out: { files: FileEntry[]; folders: FolderEntry[] },
+	out: DirectoryListing,
 	inheritedRules: IgnoreRule[] = [],
 ) {
 	const rules = await rulesForDir(dir, inheritedRules);
@@ -950,10 +941,7 @@ function registerIpc() {
 			const root = assertGrantedRoot(dirPath);
 			const stat = await fs.stat(root);
 			if (!stat.isDirectory()) throw new Error(`Not a directory: ${dirPath}`);
-			const listing = {
-				files: [] as FileEntry[],
-				folders: [] as FolderEntry[],
-			};
+			const listing: DirectoryListing = { files: [], folders: [] };
 			await collectDocumentFiles(root, listing);
 			return listing;
 		},

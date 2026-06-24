@@ -52,21 +52,16 @@ type SidebarMoveItem =
 
 export async function refreshFiles(path = workspaceStore.get().workspacePath) {
 	if (!path) return;
-	let files: FileEntry[] = [];
-	let folders: FolderEntry[] = [];
-
-	try {
-		const listing = await desktopApi.listDirectory(path);
-		files = listing.files;
-		folders = listing.folders;
-	} catch {
-		files = [];
-		folders = [];
-	}
+	const listing = await desktopApi
+		.listDirectory(path)
+		.catch((): { files: FileEntry[]; folders: FolderEntry[] } => ({
+			files: [],
+			folders: [],
+		}));
 
 	workspaceStore.set((state) => {
 		if (state.workspacePath !== path) return state;
-		return { ...state, files, folders };
+		return { ...state, files: listing.files, folders: listing.folders };
 	});
 }
 
